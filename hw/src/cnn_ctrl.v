@@ -14,10 +14,9 @@ module cnn_ctrl #(
 )(
     input  wire                     clk,
     input  wire                     rstn,
-    // Inputs
+    // INPUTS
     // buffer synchronization signals
     input  wire [IFM_BUF_CNT-1:0]   q_ifm_buf_done,
-    
     input  wire                     q_filter_buf_done,
     //
     input  wire [W_SIZE-1:0]        q_width,
@@ -25,12 +24,20 @@ module cnn_ctrl #(
     input  wire [W_CHANNEL-1:0]     q_channel,          // !!!TILED input CHANNEL!!!
     input  wire [W_FRAME_SIZE-1:0]  q_frame_size,
     input  wire                     q_start,
-    // Outputs
+    
+    // OUTPUTS
     output wire                     o_ctrl_vsync_run,
     output wire [W_DELAY-1:0]       o_ctrl_vsync_cnt,
     output wire                     o_ctrl_hsync_run,
     output wire [W_DELAY-1:0]       o_ctrl_hsync_cnt,
+    output wire                     o_ctrl_pesync_run,
+    output wire                     o_ctrl_pesync_cnt,
     output wire                     o_ctrl_data_run,
+
+    // buffer
+    output wire [IFM_BUF_CNT-1:0]   o_ifm_buf_load_start,
+    output wire [W_SIZE-1:0]        o_ifm_buf_load_row,
+    //
     
     output wire                     o_is_first_row,
     output wire                     o_is_last_row,
@@ -53,6 +60,7 @@ localparam ST_IDLE   = 3'd0,
 
 
 reg [2:0]  cstate, nstate;
+reg        ctrl_pesync_run;
 reg        ctrl_pesync_cnt;     // log2(N_PESYNC)=1
 reg        ctrl_vsync_run;
 reg [W_DELAY-1:0] ctrl_vsync_cnt;
@@ -64,6 +72,9 @@ reg [W_SIZE-1:0]        row;
 reg [W_SIZE-1:0]        col;
 reg [W_CHANNEL-1:0]     chn; 
 reg [W_FRAME_SIZE-1:0]  data_count;
+
+reg [IFM_BUF_CNT-1:0]   ifm_buf_load_start;
+reg [W_SIZE-1:0]        ifm_buf_load_row;
 
 wire                    end_frame = (data_count == q_frame_size - 1);
 
@@ -80,16 +91,6 @@ always @(posedge clk or negedge rstn) begin
     else       cstate <= nstate;
 end
 
-// PESYNC counter
-always @(posedge clk or negedge rstn) begin
-    if (!rstn)
-        pesync_cnt <= 0;
-    else if (cstate == ST_PESYNC)
-        pesync_cnt <= pesync_cnt + 1;
-    else
-        pesync_cnt <= 0;
-end
-
 // Next-state logic
 always @(*) begin
     case (cstate)
@@ -100,12 +101,13 @@ always @(*) begin
         ST_HSYNC: 
             nstate = is_last_row || q_ifm_buf_done[next_buf_id] ? ST_DATA : ST_HSYNC;
         ST_PESYNC:
-            nstate = (pesync_cnt == N_PESYNC-1) ? ST_DATA : ST_PESYNC;
+            nstate = (ctrl_pesync_cnt == N_PESYNC-1) ? ST_DATA : ST_PESYNC;
         ST_DATA:  
             nstate = 
-                end_frame ? ST_IDLE : 
-                (chn == q_channel-1 && col == q_width-1) ? ST_HSYNC : 
-                ST_DATA;
+                end_frame                           ? ST_IDLE   : 
+                (chn == q_channel-1 && is_last_col) ? ST_HSYNC  : 
+                is_last_col                         ? ST_PESYNC :
+                                                      ST_DATA   ;
         default:  
             nstate = ST_IDLE;
     endcase
@@ -114,29 +116,34 @@ end
 
 // Output enables
 always @(*) begin
-    ctrl_vsync_run = 1'b0;
-    ctrl_hsync_run = 1'b0;
-    ctrl_data_run  = 1'b0;
+    ctrl_vsync_run  = 1'b0;
+    ctrl_hsync_run  = 1'b0;
+    ctrl_pesync_run = 1'b0;
+    ctrl_data_run   = 1'b0;
     case (cstate)
-        ST_VSYNC: ctrl_vsync_run = 1'b1;
-        ST_HSYNC: ctrl_hsync_run = 1'b1;
-        ST_DATA:  ctrl_data_run  = 1'b1;
+        ST_VSYNC:   ctrl_vsync_run = 1'b1;
+        ST_HSYNC:   ctrl_hsync_run = 1'b1;
+        ST_PESYNC:  ctrl_pesync_run = 1'b1;
+        ST_DATA:    ctrl_data_run  = 1'b1;
     endcase
 end
 
-// VSYNC / HSYNC counters
-// may not use
+// VSYNC / HSYNC / PESYNC counters
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
         ctrl_vsync_cnt <= 0;
         ctrl_hsync_cnt <= 0;
+        ctrl_pesync_cnt <= 0;
     end else begin
         // VSYNC
-        if (ctrl_vsync_run) ctrl_vsync_cnt <= ctrl_vsync_cnt + 1;
-        else                ctrl_vsync_cnt <= 0;
+        if (ctrl_vsync_run)     ctrl_vsync_cnt <= ctrl_vsync_cnt + 1;
+        else                    ctrl_vsync_cnt <= 0;
         // HSYNC
-        if (ctrl_hsync_run) ctrl_hsync_cnt <= ctrl_hsync_cnt + 1;
-        else                ctrl_hsync_cnt <= 0;
+        if (ctrl_hsync_run)     ctrl_hsync_cnt <= ctrl_hsync_cnt + 1;
+        else                    ctrl_hsync_cnt <= 0;
+        // PESYNC
+        if (ctrl_pesync_run)    ctrl_pesync_cnt <= ctrl_pesync_cnt + 1;
+        else                    ctrl_pesync_cnt <= 0;
     end
 end
 
@@ -178,11 +185,25 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 
+
+// IFM buffer preload control
+always @(posedge clk or negedge rstn) begin
+    ifm_buf_load_start <= {IFM_BUF_CNT{1'b0}};
+    ifm_buf_load_row   <= {W_SIZE{1'b0}};
+    if (nstate == ST_HSYNC) begin
+        ifm_buf_load_start[next_buf_id] <= is_last_row ? 1'b0 : 1'b1;
+        ifm_buf_load_row <= is_last_row ? 0 : (row + 1);
+    end
+end
+
+
 // Outputs
 assign o_ctrl_vsync_run = ctrl_vsync_run;
 assign o_ctrl_vsync_cnt = ctrl_vsync_cnt;
 assign o_ctrl_hsync_run = ctrl_hsync_run;
 assign o_ctrl_hsync_cnt = ctrl_hsync_cnt;
+assign o_ctrl_pesync_run = ctrl_pesync_run;
+assign o_ctrl_pesync_cnt = ctrl_pesync_cnt;
 assign o_ctrl_data_run  = ctrl_data_run;
 assign o_row            = row;
 assign o_col            = col;
@@ -194,5 +215,8 @@ assign o_is_first_row   = is_first_row;
 assign o_is_last_row    = is_last_row;
 assign o_is_first_col   = is_first_col;
 assign o_is_last_col    = is_last_col;
+
+assign o_ifm_buf_load_row       = ifm_buf_load_row;
+assign o_ifm_buf_load_start     = ifm_buf_load_start;
 
 endmodule
