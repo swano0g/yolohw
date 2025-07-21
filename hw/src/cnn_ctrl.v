@@ -15,9 +15,13 @@ module cnn_ctrl #(
     input  wire                     clk,
     input  wire                     rstn,
     // INPUTS
-    // buffer synchronization signals
-    input  wire [IFM_BUF_CNT-1:0]   q_ifm_buf_done,
+    // buffer manager
+    input  wire                     q_ifm_buf_done,     // connect with o_req_done
     input  wire                     q_filter_buf_done,
+    
+    // PE
+    input  wire                     q_pe_done,          
+
     //
     input  wire [W_SIZE-1:0]        q_width,
     input  wire [W_SIZE-1:0]        q_height,
@@ -34,9 +38,9 @@ module cnn_ctrl #(
     output wire                     o_ctrl_pesync_cnt,
     output wire                     o_ctrl_data_run,
 
-    // buffer
-    output wire [IFM_BUF_CNT-1:0]   o_ifm_buf_load_start,
-    output wire [W_SIZE-1:0]        o_ifm_buf_load_row,
+    // buffer connect with Buffer Manager
+    output wire                     o_ifm_buf_req_load,
+    output wire [W_SIZE-1:0]        o_ifm_buf_req_row,
     //
     
     output wire                     o_is_first_row,
@@ -73,17 +77,26 @@ reg [W_SIZE-1:0]        col;
 reg [W_CHANNEL-1:0]     chn; 
 reg [W_FRAME_SIZE-1:0]  data_count;
 
-reg [IFM_BUF_CNT-1:0]   ifm_buf_load_start;
-reg [W_SIZE-1:0]        ifm_buf_load_row;
+
+// buffer control
+reg                     ifm_buf_req_load;       // request load
+reg [W_SIZE-1:0]        ifm_buf_req_row;        // request row
+
+reg [W_SIZE-1:0]        ifm_loaded_row_plus;   // track which row need to be fetched (0 is not loaded)
+reg                     ifm_loading;
+
+
+wire                    ready_to_calculate = (row + 2 <= ifm_loaded_row_plus);
+
 
 wire                    end_frame = (data_count == q_frame_size - 1);
-
-wire [W_IFM_BUF-1:0]    next_buf_id = (row + 1'b1);
 
 wire                    is_first_row = (row == 0) ? 1'b1: 1'b0;
 wire                    is_last_row  = (row == q_height-1) ? 1'b1: 1'b0;
 wire                    is_first_col = (col == 0) ? 1'b1: 1'b0;
 wire                    is_last_col  = (col == q_width-1) ? 1'b1 : 1'b0;
+
+
 
 // State register
 always @(posedge clk or negedge rstn) begin
@@ -99,7 +112,12 @@ always @(*) begin
         ST_VSYNC: 
             nstate = q_filter_buf_done ? ST_HSYNC : ST_VSYNC;
         ST_HSYNC: 
-            nstate = is_last_row || q_ifm_buf_done[next_buf_id] ? ST_DATA : ST_HSYNC;
+            if (ready_to_calculate || is_last_row) begin 
+                nstate = ST_PESYNC;
+            end 
+            else begin 
+                nstate = ST_HSYNC;
+            end
         ST_PESYNC:
             nstate = (ctrl_pesync_cnt == N_PESYNC-1) ? ST_DATA : ST_PESYNC;
         ST_DATA:  
@@ -186,13 +204,27 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
-// IFM buffer preload control
+// IFM buffer load control
+
 always @(posedge clk or negedge rstn) begin
-    ifm_buf_load_start <= {IFM_BUF_CNT{1'b0}};
-    ifm_buf_load_row   <= {W_SIZE{1'b0}};
-    if (nstate == ST_HSYNC) begin
-        ifm_buf_load_start[next_buf_id] <= is_last_row ? 1'b0 : 1'b1;
-        ifm_buf_load_row <= is_last_row ? 0 : (row + 1);
+    if (!rstn) begin
+        ifm_loaded_row_plus  <= 0;
+        ifm_loading     <= 0;
+    end
+
+    ifm_buf_req_load <= 0;
+    ifm_buf_req_row  <= 0;
+
+    if (cstate != ST_IDLE && cstate != ST_VSYNC) begin 
+        if (q_ifm_buf_done && ifm_loading) begin
+            ifm_loaded_row_plus <= ifm_loaded_row_plus + 1;
+            ifm_loading <= 1'b0;
+        end
+        else if (!ifm_loading && ifm_loaded_row_plus != q_height) begin
+            ifm_buf_req_load <= 1'b1;
+            ifm_buf_req_row  <= ifm_loaded_row_plus;
+            ifm_loading      <= 1'b1; 
+        end
     end
 end
 
@@ -216,7 +248,7 @@ assign o_is_last_row    = is_last_row;
 assign o_is_first_col   = is_first_col;
 assign o_is_last_col    = is_last_col;
 
-assign o_ifm_buf_load_row       = ifm_buf_load_row;
-assign o_ifm_buf_load_start     = ifm_buf_load_start;
+assign o_ifm_buf_req_row    = ifm_buf_req_row;
+assign o_ifm_buf_req_load   = ifm_buf_req_load;
 
 endmodule

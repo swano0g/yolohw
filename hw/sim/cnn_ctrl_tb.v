@@ -8,7 +8,7 @@ module cnn_ctrl_tb;
     parameter W_DELAY       = `W_DELAY;
     
     parameter IFM_BUF_CNT   = `IFM_BUFFER_CNT;       // 4
-    parameter W_IFM_BUF     = `W_IFM_BUFFER;         // 2
+    parameter W_IFM_BUF     = `IFM_BUFFER;         // 2
     
     parameter WIDTH         = 256;
     parameter HEIGHT        = 256;
@@ -17,8 +17,12 @@ module cnn_ctrl_tb;
     
     reg                      clk, rstn;
     // buffer synchronization signals
-    reg  [IFM_BUF_CNT-1:0]   q_ifm_buf_done;
+    reg                      q_ifm_buf_done;
     reg                      q_filter_buf_done;
+
+    // pe
+    reg                      q_pe_done;
+    
     //
     reg  [W_SIZE-1:0]        q_width;
     reg  [W_SIZE-1:0]        q_height;
@@ -30,12 +34,22 @@ module cnn_ctrl_tb;
     wire [W_DELAY-1:0]       ctrl_vsync_cnt;
     wire                     ctrl_hsync_run;
     wire [W_DELAY-1:0]       ctrl_hsync_cnt;
+    wire                     ctrl_pesync_run;
+    wire                     ctrl_pesync_cnt;
     wire                     ctrl_data_run;
     wire [W_SIZE-1:0]        row;
     wire [W_SIZE-1:0]        col;
     wire [W_CHANNEL-1:0]     chn;        // 채널 인덱스 출력
     wire [W_FRAME_SIZE-1:0]  data_count;
     wire                     end_frame;
+
+    wire                     ifm_buf_req_load;
+    wire [W_SIZE-1:0]        ifm_buf_req_row;
+    
+    wire                     is_first_row;
+    wire                     is_last_row;
+    wire                     is_first_col;
+    wire                     is_last_col;
 
     //-------------------------------------------------
     // Controller (FSM)
@@ -56,12 +70,22 @@ module cnn_ctrl_tb;
         .o_ctrl_vsync_cnt  (ctrl_vsync_cnt    ),
         .o_ctrl_hsync_run  (ctrl_hsync_run    ),
         .o_ctrl_hsync_cnt  (ctrl_hsync_cnt    ),
+        .o_ctrl_pesync_run (ctrl_pesync_run   ),
+        .o_ctrl_pesync_cnt (ctrl_pesync_cnt   ),
         .o_ctrl_data_run   (ctrl_data_run     ),
+        .o_is_first_row    (is_first_row      ),
+        .o_is_last_row     (is_last_row       ),
+        .o_is_first_col    (is_first_col      ),
+        .o_is_last_col     (is_last_col       ),
         .o_row             (row               ),
         .o_col             (col               ),
         .o_chn             (chn               ),  // 추가
         .o_data_count      (data_count        ),
-        .o_end_frame       (end_frame         )
+        .o_end_frame       (end_frame         ),
+
+        .o_ifm_buf_req_load(ifm_buf_req_load  ),
+        .o_ifm_buf_req_row (ifm_buf_req_row   ),
+        .q_pe_done         (q_pe_done         )
     );
 
     // Clock
@@ -70,8 +94,54 @@ module cnn_ctrl_tb;
         clk = 1'b1;
         forever #(CLK_PERIOD/2) clk = ~clk;
     end
-    
-    integer row_cnt;
+   
+    // IFM buffer 
+    reg       loading;
+    reg [11:0] load_cnt;  // 2048 < 2^12
+
+
+    always @(posedge clk or negedge rstn) begin 
+        q_pe_done <= 0;
+        if (row != 0 && ctrl_hsync_cnt == 5) begin 
+            q_pe_done <= 1;
+        end
+    end
+
+    // Reset 및 동작
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            loading        <= 1'b0;
+            load_cnt       <= 12'd0;
+            q_ifm_buf_done <= 1'b0;
+        end
+
+        if (ifm_buf_req_load && !loading) begin
+            // 새 로드 요청 감지 → 카운터 시작
+            loading        <= 1'b1;
+            load_cnt       <= 12'd0;
+            q_ifm_buf_done <= 1'b0;
+        end
+        else if (loading) begin
+            // 로딩중
+            load_cnt <= load_cnt + 1;
+
+            if (load_cnt == 12'd2047) begin
+                // 2048클럭 지연 후 1클럭 펄스 생성
+                q_ifm_buf_done <= 1'b1;
+                loading        <= 1'b0;
+            end else begin
+                q_ifm_buf_done <= 1'b0;
+            end
+        end
+        else begin
+            // idle 상태
+            q_ifm_buf_done <= 1'b0;
+        end
+    end
+    //
+
+
+
 
     //------------------------------------------------------------------------------------------------------
     // Test cases
@@ -108,19 +178,6 @@ module cnn_ctrl_tb;
         @(posedge clk) q_filter_buf_done = 1;
         @(posedge clk) q_filter_buf_done = 0;
         // ---------------------------------------
-        
-        
-        
-        // ---------------------------------------
-        // loading ifm buffer...
-        
-        for (row_cnt = 0; row_cnt < HEIGHT; row_cnt = row_cnt + 1) begin
-            repeat (2048) @(posedge clk);
-            
-            @(posedge clk) q_ifm_buf_done[row_cnt%IFM_BUF_CNT] = 1'b1;
-            @(posedge clk) q_ifm_buf_done[row_cnt%IFM_BUF_CNT] = 1'b0;
-        end
-        // --------------------------------------- 
     end
     
     initial begin
