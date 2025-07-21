@@ -11,7 +11,7 @@
 `define IFM_BUFFER_DEPTH    1536
 
 `define FILTER_BUFFER_CNT   `Tout
-`define FILTER_BUFFER       2               // log2
+`define FILTER_BUFFER       2               // log2(FILTER_BUFFER_CNT)
 `define FILTER_BUFFER_WIDTH 72
 `define FILTER_BUFFER_DEPTH 512
 
