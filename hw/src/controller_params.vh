@@ -16,6 +16,9 @@
 `define FILTER_DW           `W_KERNEL * `K * `K     // 72
 
 
+// MAC
+`define MAC_DELAY           7
+
 // BUFFER MANAGER
 `define BM_DATA_DELAY       2               // delay between req to BM <-> data receive
 
