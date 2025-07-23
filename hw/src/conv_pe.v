@@ -85,7 +85,7 @@ reg [W_CHANNEL-1:0]     filter_req_inchn;
 
 
 
-reg [IFM_DW-1:0]        in_img [0:K-1][0:K-1];
+reg [IFM_DW-1:0]        in_img [0:K*K-1];
 reg [FILTER_DW-1:0]     filter [0:Tout-1];
 
 // pipes
@@ -114,7 +114,7 @@ always @(posedge clk or negedge rstn) begin
         // in_img reset
         for (i = 0; i < K; i = i + 1) begin
             for (j = 0; j < K; j = j + 1) begin
-                in_img[i][j] <= {IFM_DW{1'b0}};
+                in_img[i*K+j] <= {IFM_DW{1'b0}};
             end
         end
 
@@ -125,12 +125,12 @@ always @(posedge clk or negedge rstn) begin
     end
     else if (ctrl_data_run) begin 
         for (i=0; i<K; i=i+1) begin 
-            in_img[i][K-1] <= bm_ifm_data[i];
+            in_img[i*K+K-1] <= bm_ifm_data[i];
         end
 
         for (i = 0; i < K; i = i + 1) begin 
             for (j = 0; j < K - 1; j = j + 1) begin 
-                in_img[i][j] <= in_img[i][j+1];
+                in_img[i*K+j] <= in_img[i*K+j+1];
             end
         end
 
@@ -213,7 +213,6 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
-
 // IFM request
 always @(posedge clk or negedge rstn) begin 
     for (i = 0; i < K; i = i + 1) begin 
@@ -245,6 +244,15 @@ always @(posedge clk or negedge rstn) begin
         filter_req_vld <= 1'b1;
     end
 end
+
+
+// 16 macs
+
+
+
+
+
+
 
 
 
