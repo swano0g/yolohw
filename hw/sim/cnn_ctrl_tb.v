@@ -34,8 +34,6 @@ module cnn_ctrl_tb;
     wire [W_DELAY-1:0]       ctrl_vsync_cnt;
     wire                     ctrl_hsync_run;
     wire [W_DELAY-1:0]       ctrl_hsync_cnt;
-    wire                     ctrl_pesync_run;
-    wire                     ctrl_pesync_cnt;
     wire                     ctrl_data_run;
     wire [W_SIZE-1:0]        row;
     wire [W_SIZE-1:0]        col;
@@ -70,8 +68,6 @@ module cnn_ctrl_tb;
         .o_ctrl_vsync_cnt  (ctrl_vsync_cnt    ),
         .o_ctrl_hsync_run  (ctrl_hsync_run    ),
         .o_ctrl_hsync_cnt  (ctrl_hsync_cnt    ),
-        .o_ctrl_pesync_run (ctrl_pesync_run   ),
-        .o_ctrl_pesync_cnt (ctrl_pesync_cnt   ),
         .o_ctrl_data_run   (ctrl_data_run     ),
         .o_is_first_row    (is_first_row      ),
         .o_is_last_row     (is_last_row       ),

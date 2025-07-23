@@ -7,7 +7,6 @@ module cnn_ctrl #(
     parameter W_CHANNEL     = `W_CHANNEL,
     parameter W_FRAME_SIZE  = `W_FRAME_SIZE,
     parameter W_DELAY       = `W_DELAY,
-    parameter N_PESYNC      = `N_PESYNC,
     
     parameter IFM_BUF_CNT   = `IFM_BUFFER_CNT,      // 4
     parameter W_IFM_BUF     = `IFM_BUFFER           // 2
@@ -34,8 +33,6 @@ module cnn_ctrl #(
     output wire [W_DELAY-1:0]       o_ctrl_vsync_cnt,
     output wire                     o_ctrl_hsync_run,
     output wire [W_DELAY-1:0]       o_ctrl_hsync_cnt,
-    output wire                     o_ctrl_pesync_run,
-    output wire                     o_ctrl_pesync_cnt,
     output wire                     o_ctrl_data_run,
 
     // buffer connect with Buffer Manager
@@ -56,16 +53,13 @@ module cnn_ctrl #(
 );
 
 // FSM states
-localparam ST_IDLE   = 3'd0,
-           ST_VSYNC  = 3'd1,
-           ST_HSYNC  = 3'd2,
-           ST_PESYNC = 3'd3,
-           ST_DATA   = 3'd4;
+localparam ST_IDLE   = 2'd0,
+           ST_VSYNC  = 2'd1,
+           ST_HSYNC  = 2'd2,
+           ST_DATA   = 2'd3;
 
 
-reg [2:0]  cstate, nstate;
-reg        ctrl_pesync_run;
-reg        ctrl_pesync_cnt;     // log2(N_PESYNC)=1
+reg [1:0]  cstate, nstate;
 reg        ctrl_vsync_run;
 reg [W_DELAY-1:0] ctrl_vsync_cnt;
 reg        ctrl_hsync_run;
@@ -113,18 +107,15 @@ always @(*) begin
             nstate = q_filter_buf_done ? ST_HSYNC : ST_VSYNC;
         ST_HSYNC: 
             if (ready_to_calculate || is_last_row) begin 
-                nstate = ST_PESYNC;
+                nstate = ST_DATA;
             end 
             else begin 
                 nstate = ST_HSYNC;
             end
-        ST_PESYNC:
-            nstate = (ctrl_pesync_cnt == N_PESYNC-1) ? ST_DATA : ST_PESYNC;
         ST_DATA:  
             nstate = 
                 end_frame                           ? ST_IDLE   : 
                 (chn == q_channel-1 && is_last_col) ? ST_HSYNC  : 
-                is_last_col                         ? ST_PESYNC :
                                                       ST_DATA   ;
         default:  
             nstate = ST_IDLE;
@@ -136,22 +127,19 @@ end
 always @(*) begin
     ctrl_vsync_run  = 1'b0;
     ctrl_hsync_run  = 1'b0;
-    ctrl_pesync_run = 1'b0;
     ctrl_data_run   = 1'b0;
     case (cstate)
         ST_VSYNC:   ctrl_vsync_run = 1'b1;
         ST_HSYNC:   ctrl_hsync_run = 1'b1;
-        ST_PESYNC:  ctrl_pesync_run = 1'b1;
         ST_DATA:    ctrl_data_run  = 1'b1;
     endcase
 end
 
-// VSYNC / HSYNC / PESYNC counters
+// VSYNC / HSYNC counters
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
         ctrl_vsync_cnt <= 0;
         ctrl_hsync_cnt <= 0;
-        ctrl_pesync_cnt <= 0;
     end else begin
         // VSYNC
         if (ctrl_vsync_run)     ctrl_vsync_cnt <= ctrl_vsync_cnt + 1;
@@ -159,9 +147,6 @@ always @(posedge clk or negedge rstn) begin
         // HSYNC
         if (ctrl_hsync_run)     ctrl_hsync_cnt <= ctrl_hsync_cnt + 1;
         else                    ctrl_hsync_cnt <= 0;
-        // PESYNC
-        if (ctrl_pesync_run)    ctrl_pesync_cnt <= ctrl_pesync_cnt + 1;
-        else                    ctrl_pesync_cnt <= 0;
     end
 end
 
@@ -234,8 +219,6 @@ assign o_ctrl_vsync_run = ctrl_vsync_run;
 assign o_ctrl_vsync_cnt = ctrl_vsync_cnt;
 assign o_ctrl_hsync_run = ctrl_hsync_run;
 assign o_ctrl_hsync_cnt = ctrl_hsync_cnt;
-assign o_ctrl_pesync_run = ctrl_pesync_run;
-assign o_ctrl_pesync_cnt = ctrl_pesync_cnt;
 assign o_ctrl_data_run  = ctrl_data_run;
 assign o_row            = row;
 assign o_col            = col;
