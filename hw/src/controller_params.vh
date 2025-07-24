@@ -15,9 +15,13 @@
 `define IFM_DW              `W_DATA * `Tin          // 32
 `define FILTER_DW           `W_KERNEL * `K * `K     // 72
 
+// ADDER TREE
+`define ADDER_TREE_DELAY    3
 
 // MAC
 `define MAC_DELAY           7
+`define MAC_W_IN            128
+`define MAC_W_OUT           20
 
 // BUFFER MANAGER
 `define BM_DATA_DELAY       2               // delay between req to BM <-> data receive
@@ -33,6 +37,8 @@
 `define FILTER_BUFFER_WIDTH `FILTER_DW
 `define FILTER_BUFFER_DEPTH 512
 
+`define PSUM_BUFFER_WI
+
 
 
 // CONTROLLER
@@ -43,6 +49,8 @@
 `define W_DELAY         14              // MAX DELAY 2048
 
 
+// PE
+`define PE_DELAY        `MAC_DELAY + `ADDER_TREE_DELAY
 
 
 `endif
