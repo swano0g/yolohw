@@ -3,8 +3,7 @@
 
 module adder_tree_4 #(
     parameter W_IN  = 20,  // input bit-width
-    parameter W_OUT = 32,  // output bit-width
-    parameter W_PSUM = `W_PSUM
+    parameter W_OUT = `W_PSUM  // output bit-width
 )(
     input                          clk,
     input                          rstn,
@@ -13,18 +12,16 @@ module adder_tree_4 #(
     input      signed [W_IN-1:0]   in1,
     input      signed [W_IN-1:0]   in2,
     input      signed [W_IN-1:0]   in3,
-    input      signed [W_PSUM-1:0] psum,
-    output reg signed [W_OUT-1:0]  acc_o,
-    output reg                     vld_o
+    output     signed [W_OUT-1:0]  acc_o,
+    output                         vld_o
 );
 
 // pipeline registers for partial sums
 reg signed [W_IN:0]    sum1_0, sum1_1;   // width = W_IN+1
 reg signed [W_IN+1:0]  sum2;             // width = W_IN+2
-reg signed [W_OUT-1:0] sum3;
 
 // valid signal pipeline
-reg vld_d1, vld_d2, vld_d3;
+reg vld_d1, vld_d2;
 
 // Level 1: add pairs in0+in1, in2+in3
 always @(posedge clk or negedge rstn) begin
@@ -50,18 +47,7 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 
-// Level 3:
-always @(posedge clk or negedge rstn) begin
-    if (!rstn) begin
-        sum3  <= 'd0;
-        vld_d3 <= 1'b0;
-    end else begin
-        sum3  <= $signed(sum2) + $signed(psum);  // final sum
-        vld_d3 <= vld_d2;          // propagate valid
-    end
-end
-
-assign vld_o = vld_d3;
-assign acc_0 = $signed(sum3);
+assign vld_o = vld_d2;
+assign acc_o = $signed(sum2);
 
 endmodule

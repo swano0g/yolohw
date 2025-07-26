@@ -10,13 +10,14 @@
 
 
 `define Tin                 4               // INPUT CHANNEL TILING 
-`define Tout                4               // OUTPUT CHANNEL TILING       
+`define Tout                4               // OUTPUT CHANNEL TILING
+`define W_Tin               2       
 
-`define IFM_DW              `W_DATA * `Tin          // 32
-`define FILTER_DW           `W_KERNEL * `K * `K     // 72
+`define IFM_DW              `W_DATA * `Tin                  // 32
+`define FILTER_DW           `W_KERNEL * `K * `K             // 288
 
 // ADDER TREE
-`define ADDER_TREE_DELAY    3
+`define ADDER_TREE_DELAY    2
 
 // MAC
 `define MAC_DELAY           7
@@ -49,7 +50,10 @@
 
 
 // PE
-`define PE_DELAY        `MAC_DELAY + `ADDER_TREE_DELAY
+`define PE_IFM_FLAT_BW          `IFM_DW * `K            
+`define PE_FILTER_FLAT_BW       `FILTER_DW * `Tout   
+`define PE_ACCO_FLAT_BW         `W_PSUM * `Tout
+`define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY
 
 
 `endif
