@@ -28,10 +28,12 @@
 `define BM_DATA_DELAY       2               // delay between req to BM <-> data receive
 
 // BUFFER
-`define IFM_BUFFER_CNT      4               // # IFM BUFFER 
-`define IFM_BUFFER          2               // log2(IFM_BUFFER_CNT)
-`define IFM_BUFFER_WIDTH    `IFM_DW
-`define IFM_BUFFER_DEPTH    1536
+`define BUFFER_ADDRESS_BW   14
+
+`define IFM_BUFFER_CNT          `K + 1               // # IFM BUFFER 
+`define IFM_BUFFER              2               // log2(IFM_BUFFER_CNT)
+`define IFM_BUFFER_WIDTH        `IFM_DW
+`define IFM_BUFFER_DEPTH        1536
 
 `define FILTER_BUFFER_CNT   `Tout
 `define FILTER_BUFFER       2               // log2(FILTER_BUFFER_CNT)

@@ -37,8 +37,8 @@ module conv_pe #(
     input  wire                     clk,
     input  wire                     rstn,
     
-    input  wire                     c_ctrl_data_run,
-    input  wire                     c_top_cal_start,
+    input  wire                     t_data_run,
+    input  wire                     t_cal_start,
 
     input  wire                     c_is_first_row,
     input  wire                     c_is_last_row,
@@ -108,7 +108,7 @@ always @(posedge clk or negedge rstn) begin
         end
     end
     
-    if (c_ctrl_data_run || c_top_cal_start) begin
+    if (t_data_run || t_cal_start) begin
         for (i = 0; i < K; i = i + 1) begin 
             for (j = 0; j < K - 1; j = j + 1) begin 
                 in_img[i*K+j] <= in_img[i*K+j+1];
@@ -116,7 +116,7 @@ always @(posedge clk or negedge rstn) begin
         end
     end
 
-    if (c_ctrl_data_run) begin 
+    if (t_data_run) begin 
         for (i = 0; i < K; i = i + 1) begin 
             in_img[i*K+K-1] <= bm_ifm_data[i];
         end
@@ -173,7 +173,7 @@ always@(posedge clk or negedge rstn) begin
         win[i] = 128'd0;
     end
 
-    if(c_top_cal_start) begin
+    if(t_cal_start) begin
 		// Tiled IFM data
         for (i = 0; i < Tin; i = i + 1) begin 
             din[i][ 7: 0] = (c_is_first_row || c_is_first_col) ? 8'd0 : in_img[0 * K + 0][i*8+:8];
@@ -209,7 +209,7 @@ generate
             mac u_mac_inst(
             ./*input 		 */clk	(clk	        ), 
             ./*input 		 */rstn	(rstn	        ), 
-            ./*input 		 */vld_i(c_top_cal_start), 
+            ./*input 		 */vld_i(t_cal_start), 
             ./*input [127:0] */win	(win[Tin*w+d]   ), 
             ./*input [127:0] */din	(din[d]	        ),
             ./*output[ 19:0] */acc_o(mac_acc_o[Tin*w+d]), 
