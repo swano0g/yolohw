@@ -5,6 +5,10 @@ module pe_engine_tb;
     //----------------------------------------------------------------------  
     // 1) 파라미터: controller_params.vh에서 import
     //----------------------------------------------------------------------  
+    parameter W_SIZE        = `W_SIZE;
+    parameter W_CHANNEL     = `W_CHANNEL;
+    parameter W_FRAME_SIZE  = `W_FRAME_SIZE;
+    parameter W_DELAY       = `W_DELAY;
     parameter K                = `K;
     parameter Tin              = `Tin;
     parameter Tout             = `Tout;
@@ -49,6 +53,19 @@ module pe_engine_tb;
     wire [BUF_AW-1:0] pb_addr;
     wire [W_PSUM-1:0] psum_data;
 
+
+    wire [192*32-1:0] psum_flat; // 16*3*4 32bit
+
+    wire [31:0] psum_unflat [192-1:0];
+
+    genvar gi;
+    generate
+        for (gi = 0; gi < 192; gi = gi + 1) begin : UNFLAT_PSUM
+            assign psum_unflat[gi] = psum_flat[gi*32 +: 32];
+        end
+    endgenerate
+
+
     //----------------------------------------------------------------------  
     // 3) clock & reset
     //----------------------------------------------------------------------  
@@ -64,7 +81,7 @@ module pe_engine_tb;
     wire                     filter_buf_done;
 
     // pe
-    reg                      q_pe_done;
+    wire                     pe_done;
     
     //
     reg  [W_SIZE-1:0]        q_width;
@@ -96,8 +113,8 @@ module pe_engine_tb;
         .clk               (clk               ),
         .rstn              (rstn              ),
         // Inputs
-        .q_ifm_buf_done    (q_ifm_buf_done    ),
-        .q_filter_buf_done (q_filter_buf_done ),
+        .q_ifm_buf_done    (ifm_buf_done      ),
+        .q_filter_buf_done (filter_buf_done   ),
         .q_width           (q_width           ),
         .q_height          (q_height          ),
         .q_channel         (q_channel         ),  // 추가
@@ -121,7 +138,7 @@ module pe_engine_tb;
 
         .o_ifm_buf_req_load(ifm_buf_req_load  ),
         .o_ifm_buf_req_row (ifm_buf_req_row   ),
-        .q_pe_done         (q_pe_done         )
+        .q_pe_done         (pe_done           )
     );
 
   //----------------------------------------------------------------------  
@@ -159,6 +176,8 @@ module pe_engine_tb;
         .o_pb_addr(pb_addr),
 
         .pb_data_in(psum_data),
+
+        .dbg_psum_flat(psum_flat)
     );
 
     //----------------------------------------------------------------------  
@@ -210,10 +229,10 @@ module pe_engine_tb;
             if (ifm_loading_buf_num == 0) begin 
                 ifm0_loaded <= 1;
             end
-            else if (ifm_loading_buf_num == 0) begin 
+            else if (ifm_loading_buf_num == 1) begin 
                 ifm1_loaded <= 1;
             end
-            else if (ifm_loading_buf_num == 0) begin 
+            else if (ifm_loading_buf_num == 2) begin 
                 ifm2_loaded <= 1;
             end
 
@@ -292,33 +311,18 @@ module pe_engine_tb;
         q_height       = HEIGHT;   
         q_channel      = CHANNEL;           // (tiled)채널 수 1. 즉 실제 input channel = 4
         q_frame_size   = FRAME_SIZE;
-        q_start        = 1'b0; 
-        q_filter_buf_done   = 1'b0;
-        q_ifm_buf_done      = 4'b0;
+        q_start        = 0; 
+//        filter_buf_done   = 0;
+//        ifm_buf_done      = 0;
 
-        // 8.3) load_filter, load_idx 시퀀스
-        # (10*CLK_PERIOD);
-        for (i=0; i<4; i=i+1) begin
-        load_filter = 1;
-        load_idx    = i;
-        # CLK_PERIOD;
-        end
-        load_filter = 0;
-        # CLK_PERIOD;
-        change_filter = 1;
-        # CLK_PERIOD;
-        change_filter = 0;
 
-        // 8.4) start 전체 프레임 처리를 위해 run 신호 인에이블
-        # CLK_PERIOD;
-        q_start = 1;
-        # (256*256*CLK_PERIOD);  // 충분히 긴 시간
-        q_start = 0;
+        #(4*CLK_PERIOD) rstn = 1'b1;
+        #(CLK_PERIOD);
 
-        // 8.5) 출력 모니터
-        $display("acc_ch[0]=%h, acc_ch[1]=%h, acc_ch[2]=%h, acc_ch[3]=%h",
-                acc_ch[0], acc_ch[1], acc_ch[2], acc_ch[3]);
-        $finish;
+        #(100*CLK_PERIOD)
+            @(posedge clk) q_start = 1'b1;
+        #(4*CLK_PERIOD)
+            @(posedge clk) q_start = 1'b0;
     end
 
 

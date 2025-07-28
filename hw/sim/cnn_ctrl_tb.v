@@ -150,7 +150,7 @@ module cnn_ctrl_tb;
         q_frame_size   = FRAME_SIZE;
         q_start        = 1'b0; 
         q_filter_buf_done   = 1'b0;
-        q_ifm_buf_done      = 4'b0;
+        q_ifm_buf_done      = 1'b0;
         
         // FILTER
         // FILTER WIDTH=3, INPUT CHANNEL=16, TILED OUTPUT CHANNEL=4

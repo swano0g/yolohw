@@ -71,9 +71,12 @@ module pe_engine #(
 
     input  wire [W_PSUM-1:0]        pb_data_in,
 
+    // control signal
+    // output wire                     o_pe_done,
+
 
     // DEBUG
-    // output wire []
+    output wire [192*32-1:0]          dbg_psum_flat
 );
 
 // practically after 3 cycle from row,col,chn signal, calculation could start.
@@ -86,6 +89,24 @@ localparam  PE_PRE_CAL_DELAY    = BUF_DELAY + PE_DATA_DELAY + PE_WINDOW_DELAY; /
 localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 12
 
 
+// pe_done signal
+// reg [] pe_done_cnt
+// reg pe_done;
+// reg pe_done_d;
+
+// always @(posedge clk or negedge rstn) begin 
+//     if (!rstn) begin 
+//         pe_done <= 0;
+//         pe_done_d <= 0;
+//     end
+//     else begin 
+//         pe_done_d <= pe_done;
+//         if ()
+//     end
+// end
+
+// c_ctrl_data_run && is_first_col
+wire t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_PRE_CAL_DELAY-2][2];
 
 
 // 1. pipe
@@ -105,8 +126,6 @@ reg                 filter_data_vld_pipe [0:BUF_DELAY-1];
 integer i;
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
-
-
         for (i = 0; i < BUF_DELAY; i = i + 1) begin 
             filter_offset_pipe[i] <= 0;
             filter_data_vld_pipe[i] <= 0;
@@ -164,9 +183,10 @@ always @(posedge clk or negedge rstn) begin
         filter_loaded <= 0;
         filter_offset <= 0;
         fb_req <= 0;
+        fb_addr <= 0;
     end
     else begin 
-        if (!filter_loaded) begin 
+        if (!filter_loaded && (c_ctrl_data_run || c_ctrl_hsync_run)) begin 
             
             fb_addr <= c_chn * Tin + filter_offset;
 
@@ -191,8 +211,9 @@ assign o_fb_addr = fb_addr;
 
 // 4. psum
 // debugging
-
 reg [31:0] psumbuf [192-1:0]; // 16*3*4=192     256*256*4(Tout)=262144
+
+
 
 wire [PE_ACCO_FLAT_BW-1:0] acc_flat;
 wire                   vld;
@@ -208,16 +229,19 @@ endgenerate
 
 
 localparam PSUM_IDX_W = 20;
-reg [PSUM_IDX_W-1:0] idx0; // output channel 0
+reg [PSUM_IDX_W-1:0] idx0; // base address
 
 
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
         idx0 <= {PSUM_IDX_W{1'b0}};
+        for (i = 0; i < 192; i = i + 1) begin 
+            psumbuf[i] <= 0;
+        end
     end
     else if (vld) begin
         idx0 = (row_pipe[STG-1]*3 + col_pipe[STG-1]) * Tout;
-        psumbuf[idx0] <= acc_arr[0];
+        psumbuf[idx0 + 0] <= acc_arr[0];
         psumbuf[idx0 + 1] <= acc_arr[1];
         psumbuf[idx0 + 2] <= acc_arr[2];
         psumbuf[idx0 + 3] <= acc_arr[3];
@@ -225,6 +249,20 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
+
+
+// debug output
+wire [192*32-1:0] psum_flat;
+
+genvar gi;
+generate
+  for (gi = 0; gi < 192; gi = gi + 1) begin : PACK_PSUM
+    // psum_flat[(i+1)*32-1 -: 32] == psumbuf[i][31:0]
+    assign psum_flat[(gi+1)*32-1 -: 32] = psumbuf[gi];
+  end
+endgenerate
+
+assign dbg_psum_flat = psum_flat;
 
 // 5. DUT: conv_pe
 
@@ -244,7 +282,7 @@ conv_pe u_conv_pe(
     ./*input    */bm_ifm_data_flat(ib_data_flat     ),
 
     // FILTER BUFFER 
-    ./*input    */change_filter      (location_pipe[PE_PRE_CAL_DELAY-2][2]),
+    ./*input    */change_filter      (t_change_filter                     ),    // is_first_col
     ./*input    */load_filter        (filter_data_vld_pipe[BUF_DELAY-1]   ),
     ./*input    */load_idx           (filter_offset_pipe[BUF_DELAY-1]     ),
     ./*input    */bm_filter_data_flat(fb_data_flat                        ),
