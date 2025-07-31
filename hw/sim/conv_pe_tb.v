@@ -43,8 +43,8 @@ module conv_pe_tb;
     reg [PE_IFM_FLAT_BW-1:0]      bm_ifm_data_flat;
     reg [PE_FILTER_FLAT_BW-1:0]   bm_filter_data_flat;
     reg                           change_filter;
-    wire [PE_ACCO_FLAT_BW-1:0]     o_acc_flat;
-    wire                           o_vld;
+    wire [PE_ACCO_FLAT_BW-1:0]    o_acc_flat;
+    wire                          o_vld;
 
     //--------------------------------------------------------------------------
     // DUT instantiation
@@ -52,8 +52,8 @@ module conv_pe_tb;
     conv_pe u_conv_pe (
         .clk                   (clk),
         .rstn                  (rstn),
-        .c_ctrl_data_run       (c_ctrl_data_run),
-        .c_top_cal_start       (c_top_cal_start),
+        .t_data_run            (c_ctrl_data_run),
+        .t_cal_start           (c_top_cal_start),
         .c_is_first_row        (c_is_first_row_pipe[2]),
         .c_is_last_row         (c_is_last_row_pipe[2]),
         .c_is_first_col        (c_is_first_col_pipe[2]),
@@ -201,7 +201,7 @@ module conv_pe_tb;
   //--------------------------------------------------------------------------
   always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
-        row               <= 0;
+        row               <= 2;
         col               <= 0;
         c_ctrl_data_run   <= 1'b0;
         c_is_first_row    <= 1'b1;
@@ -236,7 +236,7 @@ module conv_pe_tb;
         if (col == 3) begin 
             c_top_cal_start = 1'b1;
         end
-        if (col == 0 && row == 1) begin 
+        if (col == 0 && row == 3) begin 
             c_ctrl_data_run <= 1'b0;  // 끝나면 stop
             q_start <= 1'b0;
         end

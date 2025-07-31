@@ -49,6 +49,8 @@ module pe_engine #(
     input wire                          c_is_first_col,
     input wire                          c_is_last_col,
 
+    input  wire [W_SIZE-1:0]            q_channel,      // tiled input channel
+
 
     // IFM buffer
     input  wire [IFM_DW-1:0]        ib_data0_in,
@@ -76,37 +78,20 @@ module pe_engine #(
 
 
     // DEBUG
-    output wire [192*32-1:0]          dbg_psum_flat
+    output wire [192*32-1:0]          dbg_psum_flat,
+    output wire [PE_ACCO_FLAT_BW-1:0] dbg_acco_flat
 );
 
-// practically after 3 cycle from row,col,chn signal, calculation could start.
-localparam  BUF_DELAY           = 1;  // buf -> pe
+localparam  BUF_DELAY           = 1;  // calculate index -> buf -> pe
 localparam  PE_DATA_DELAY       = 1;  // pe save data
-localparam  PE_WINDOW_DELAY     = 1;  // to start calculation one more data should be loaded at pe.
+localparam  PE_WINDOW_DELAY     = 1;  // load window
 
 localparam  PE_PRE_CAL_DELAY    = BUF_DELAY + PE_DATA_DELAY + PE_WINDOW_DELAY; // 3
 
 localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 12
 
 
-// pe_done signal
-// reg [] pe_done_cnt
-// reg pe_done;
-// reg pe_done_d;
-
-// always @(posedge clk or negedge rstn) begin 
-//     if (!rstn) begin 
-//         pe_done <= 0;
-//         pe_done_d <= 0;
-//     end
-//     else begin 
-//         pe_done_d <= pe_done;
-//         if ()
-//     end
-// end
-
-// c_ctrl_data_run && is_first_col
-wire t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_PRE_CAL_DELAY-2][2];
+wire t_change_filter;
 
 
 // 1. pipe
@@ -115,7 +100,7 @@ reg [W_SIZE-1:0]    col_pipe [0:STG-1];
 reg [W_CHANNEL-1:0] chn_pipe [0:STG-1];
 
 // for calculation
-reg                 data_vld_pipe [0:PE_PRE_CAL_DELAY-1];   // when data goes into pe
+reg                 data_vld_pipe [0:STG-1];   // when data goes into pe
 reg [3:0]           location_pipe [0:PE_PRE_CAL_DELAY-1];   // when start calculation
 
 // for filter load
@@ -132,11 +117,12 @@ always @(posedge clk or negedge rstn) begin
         end
 
         for (i = 0; i < PE_PRE_CAL_DELAY; i = i + 1) begin 
-            data_vld_pipe[i] <= 0;
             location_pipe[i] <= 0;
         end
 
         for (i = 0; i < STG; i = i + 1) begin
+            data_vld_pipe[i] <= 0;
+
             row_pipe[i] <= 0;
             col_pipe[i] <= 0;
             chn_pipe[i] <= 0;
@@ -149,12 +135,18 @@ always @(posedge clk or negedge rstn) begin
         data_vld_pipe[0] <= c_ctrl_data_run;
         location_pipe[0] <= {c_is_last_col,  c_is_first_col, c_is_last_row, c_is_first_row};
 
+        for (i = 1; i < BUF_DELAY; i = i + 1) begin 
+            filter_offset_pipe[i] <= filter_offset_pipe[i-1];
+            filter_data_vld_pipe[i] <= filter_data_vld_pipe[i-1];
+        end
+
         for (i = 1; i < PE_PRE_CAL_DELAY; i = i + 1) begin 
-            data_vld_pipe[i] <= data_vld_pipe[i-1];
             location_pipe[i] <= location_pipe[i-1];
         end
 
         for (i = 1; i < STG; i = i + 1) begin
+            data_vld_pipe[i] <= data_vld_pipe[i-1];
+
             row_pipe[i] <= row_pipe[i-1];
             col_pipe[i] <= col_pipe[i-1];
             chn_pipe[i] <= chn_pipe[i-1];
@@ -183,25 +175,46 @@ always @(posedge clk or negedge rstn) begin
         filter_loaded <= 0;
         filter_offset <= 0;
         fb_req <= 0;
-        fb_addr <= 0;
     end
     else begin 
-        if (!filter_loaded && (c_ctrl_data_run || c_ctrl_hsync_run)) begin 
-            
-            fb_addr <= c_chn * Tin + filter_offset;
+        filter_data_vld_pipe[0] <= 0;
+        filter_offset_pipe[0] <= 0;
 
-            filter_offset_pipe[0]   <= filter_offset;
+        // possible to load filter
+        if (!filter_loaded && !fb_req && (c_ctrl_data_run || c_ctrl_hsync_run)) begin 
+            fb_req <= 1;
             filter_data_vld_pipe[0] <= 1;
-
+            filter_offset_pipe[0] <= filter_offset;
+        end
+        else if (fb_req) begin 
+            filter_offset <= filter_offset + 1;
+            filter_data_vld_pipe[0] <= 1;
+            filter_offset_pipe[0] <= filter_offset;
+            
+            // end
             if (filter_offset == Tin - 1) begin 
-                filter_loaded <= 1;
                 fb_req <= 0;
-                filter_data_vld_pipe[0] <= 1'b0;
-            end else begin 
-                fb_req  <= 1;
-                filter_offset <= filter_offset + 1;
+                filter_loaded <= 1;
+                filter_offset <= 0;
+                filter_data_vld_pipe[0] <= 0;
+                filter_offset_pipe[0] <= 0;
             end
         end
+
+        // change filter
+        if (t_change_filter) begin 
+            filter_loaded <= 0;
+        end
+    end
+end
+
+// filter address calculation; combinational
+always @(*) begin 
+    if (!rstn) begin 
+        fb_addr = 0;
+    end
+    else begin 
+        fb_addr = c_chn * Tin + filter_offset;
     end
 end
 
@@ -209,9 +222,12 @@ assign o_fb_req  = fb_req;
 assign o_fb_addr = fb_addr;
 
 
-// 4. psum
-// debugging
-reg [31:0] psumbuf [192-1:0]; // 16*3*4=192     256*256*4(Tout)=262144
+assign t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_PRE_CAL_DELAY-2][2];
+
+
+// 4. psum (incomplete)
+// for debugging
+reg [31:0] psumbuf [192-1:0]; // 16*3*4=192     256*256*4(Tout)=262144      
 
 
 
@@ -240,11 +256,12 @@ always @(posedge clk or negedge rstn) begin
         end
     end
     else if (vld) begin
-        idx0 = (row_pipe[STG-1]*3 + col_pipe[STG-1]) * Tout;
-        psumbuf[idx0 + 0] <= acc_arr[0];
-        psumbuf[idx0 + 1] <= acc_arr[1];
-        psumbuf[idx0 + 2] <= acc_arr[2];
-        psumbuf[idx0 + 3] <= acc_arr[3];
+        idx0 = (row_pipe[STG-1]*16 + col_pipe[STG-1]) * Tout;
+
+        psumbuf[idx0 + 0] <= $signed(psumbuf[idx0 + 0]) + $signed(acc_arr[0]);
+        psumbuf[idx0 + 1] <= $signed(psumbuf[idx0 + 1]) + $signed(acc_arr[1]);
+        psumbuf[idx0 + 2] <= $signed(psumbuf[idx0 + 2]) + $signed(acc_arr[2]);
+        psumbuf[idx0 + 3] <= $signed(psumbuf[idx0 + 3]) + $signed(acc_arr[3]);
     end
 end
 
@@ -263,6 +280,7 @@ generate
 endgenerate
 
 assign dbg_psum_flat = psum_flat;
+assign dbg_acco_flat = acc_flat;
 
 // 5. DUT: conv_pe
 
@@ -279,7 +297,7 @@ conv_pe u_conv_pe(
     ./*input    */c_is_last_col (location_pipe[PE_PRE_CAL_DELAY-1][3]),
 
     // IFM BUFFER
-    ./*input    */bm_ifm_data_flat(ib_data_flat     ),
+    ./*input    */bm_ifm_data_flat   (ib_data_flat     ),
 
     // FILTER BUFFER 
     ./*input    */change_filter      (t_change_filter                     ),    // is_first_col

@@ -53,10 +53,12 @@ module pe_engine_tb;
     wire [BUF_AW-1:0] pb_addr;
     wire [W_PSUM-1:0] psum_data;
 
-
+    // debug
     wire [192*32-1:0] psum_flat; // 16*3*4 32bit
 
     wire [31:0] psum_unflat [192-1:0];
+
+    wire [PE_ACCO_FLAT_BW-1:0] dbg_acco;
 
     genvar gi;
     generate
@@ -159,6 +161,8 @@ module pe_engine_tb;
         .c_is_last_row (is_last_row),
         .c_is_first_col(is_first_col),
         .c_is_last_col (is_last_col),
+
+        .q_channel(q_channel),
         
         .ib_data0_in(ifm_data_0), 
         .ib_data1_in(ifm_data_1), 
@@ -177,7 +181,8 @@ module pe_engine_tb;
 
         .pb_data_in(psum_data),
 
-        .dbg_psum_flat(psum_flat)
+        .dbg_psum_flat(psum_flat),
+        .dbg_acco_flat(dbg_acco)
     );
 
     //----------------------------------------------------------------------  
