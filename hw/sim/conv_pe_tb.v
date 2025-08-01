@@ -94,6 +94,16 @@ module conv_pe_tb;
     reg [FILTER_DW-1:0] filterbuf2 [0:3];
     reg [FILTER_DW-1:0] filterbuf3 [0:3];
 
+    integer i;
+    initial begin 
+        for (i = 0; i < K; i = i + 1) begin 
+            bm_ifm_data[i] = 0;
+        end
+        for (i = 0; i < Tout; i = i + 1) begin 
+            bm_filter_data[i] = 0;
+        end
+    end
+
     integer idx;
     always @(*) begin
         // pack K entries of IFM into flat bus: MSB=ifmbuf2 down to LSB=ifmbuf0
@@ -136,7 +146,7 @@ module conv_pe_tb;
 
 
 
-  integer i, row, col;
+  integer row, col;
 
   //--------------------------------------------------------------------------
   // Initialize IFM buffers

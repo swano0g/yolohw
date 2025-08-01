@@ -70,21 +70,6 @@ module pe_engine_tb;
     wire [BUF_AW-1:0] pb_addr;
     wire [W_PSUM-1:0] psum_data;
 
-    // debug
-    wire [192*32-1:0] psum_flat; // 16*3*4 32bit
-
-    wire [31:0] psum_unflat [192-1:0];
-
-    wire [PE_ACCO_FLAT_BW-1:0] dbg_acco;
-
-    genvar gi;
-    generate
-        for (gi = 0; gi < 192; gi = gi + 1) begin : UNFLAT_PSUM
-            assign psum_unflat[gi] = psum_flat[gi*32 +: 32];
-        end
-    endgenerate
-
-
     //----------------------------------------------------------------------  
     // 3) clock & reset
     //----------------------------------------------------------------------  
@@ -196,10 +181,7 @@ module pe_engine_tb;
         .o_pb_req(pb_req),
         .o_pb_addr(pb_addr),
 
-        .pb_data_in(psum_data),
-
-        .dbg_psum_flat(psum_flat),
-        .dbg_acco_flat(dbg_acco)
+        .pb_data_in(psum_data)
     );
 
     //----------------------------------------------------------------------  
@@ -339,9 +321,6 @@ module pe_engine_tb;
         q_channel      = TEST_T_CHNIN;           // (tiled)채널 수 1. 즉 실제 input channel = 4
         q_frame_size   = TEST_FRAME_SIZE;
         q_start        = 0; 
-//        filter_buf_done   = 0;
-//        ifm_buf_done      = 0;
-
 
         #(4*CLK_PERIOD) rstn = 1'b1;
         #(CLK_PERIOD);

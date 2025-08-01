@@ -71,18 +71,13 @@ module pe_engine #(
     output wire                     o_pb_req,
     output wire [BUF_AW-1:0]        o_pb_addr,
 
-    input  wire [W_PSUM-1:0]        pb_data_in,
+    input  wire [W_PSUM-1:0]        pb_data_in
 
     // control signal
-    // output wire                     o_pe_done,
-
-
-    // DEBUG
-    output wire [192*32-1:0]          dbg_psum_flat,
-    output wire [PE_ACCO_FLAT_BW-1:0] dbg_acco_flat
+    // output wire                     o_pe_done,   // maybe needed for psum logic
 );
 
-localparam  BUF_DELAY           = 1;  // calculate index -> buf -> pe
+localparam  BUF_DELAY           = 1;  // (calculate index 0 cycle ->) buf -> pe
 localparam  PE_DATA_DELAY       = 1;  // pe save data
 localparam  PE_WINDOW_DELAY     = 1;  // load window
 
@@ -276,25 +271,7 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
-
-
-// debug output
-wire [192*32-1:0] psum_flat;
-
-genvar gi;
-generate
-  for (gi = 0; gi < 192; gi = gi + 1) begin : PACK_PSUM
-    // psum_flat[(i+1)*32-1 -: 32] == psumbuf[i][31:0]
-    assign psum_flat[(gi+1)*32-1 -: 32] = psumbuf[gi];
-  end
-endgenerate
-
-assign dbg_psum_flat = psum_flat;
-assign dbg_acco_flat = acc_flat;
-
 // 5. DUT: conv_pe
-
-
 conv_pe u_conv_pe(
     ./*input    */clk           (clk                              ),
     ./*input    */rstn          (rstn                             ),

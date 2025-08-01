@@ -14,18 +14,16 @@
 `define W_Tin               2       
 
 `define IFM_DW              `W_DATA * `Tin                  // 32
-`define FILTER_DW           `W_KERNEL * `K * `K             // 288
+`define FILTER_DW           `W_KERNEL * `K * `K             // 72
 
 // ADDER TREE
 `define ADDER_TREE_DELAY    2
 
 // MAC
-`define MAC_DELAY           7
+`define MAC_DELAY           9               // 5(mul) + 4(adder tree)
 `define MAC_W_IN            128
 `define MAC_W_OUT           20
 
-// BUFFER MANAGER
-`define BM_DATA_DELAY       2               // delay between req to BM <-> data receive
 
 // BUFFER
 `define BUFFER_ADDRESS_BW   14
@@ -55,7 +53,7 @@
 `define PE_IFM_FLAT_BW          `IFM_DW * `K            
 `define PE_FILTER_FLAT_BW       `FILTER_DW * `Tout   
 `define PE_ACCO_FLAT_BW         `W_PSUM * `Tout
-`define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY + 2 // idk why 2 more cycle is needed..
+`define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY  // 11
 
 
 `endif
