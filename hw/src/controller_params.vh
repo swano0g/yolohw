@@ -55,7 +55,7 @@
 `define PE_IFM_FLAT_BW          `IFM_DW * `K            
 `define PE_FILTER_FLAT_BW       `FILTER_DW * `Tout   
 `define PE_ACCO_FLAT_BW         `W_PSUM * `Tout
-`define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY
+`define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY + 2 // idk why 2 more cycle is needed..
 
 
 `endif

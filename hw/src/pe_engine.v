@@ -88,7 +88,7 @@ localparam  PE_WINDOW_DELAY     = 1;  // load window
 
 localparam  PE_PRE_CAL_DELAY    = BUF_DELAY + PE_DATA_DELAY + PE_WINDOW_DELAY; // 3
 
-localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 12
+localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 12 /// +2..
 
 
 wire t_change_filter;
@@ -232,6 +232,7 @@ assign o_fb_addr = fb_addr;
 
 
 assign t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_PRE_CAL_DELAY-2][2];
+
 
 
 // 4. psum (incomplete)
