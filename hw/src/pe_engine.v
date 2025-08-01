@@ -166,6 +166,8 @@ wire [PE_FILTER_FLAT_BW-1:0] fb_data_flat = {fb_data3_in, fb_data2_in, fb_data1_
 reg             filter_loaded;
 reg [W_Tin-1:0] filter_offset;
 
+reg [W_CHANNEL-1:0] filter_idx;
+
 reg fb_req;
 reg [BUF_AW-1:0] fb_addr;
 
@@ -174,6 +176,7 @@ always @(posedge clk or negedge rstn) begin
         //reset
         filter_loaded <= 0;
         filter_offset <= 0;
+        filter_idx <= 0;
         fb_req <= 0;
     end
     else begin 
@@ -198,6 +201,12 @@ always @(posedge clk or negedge rstn) begin
                 filter_offset <= 0;
                 filter_data_vld_pipe[0] <= 0;
                 filter_offset_pipe[0] <= 0;
+                if (filter_idx == q_channel - 1) begin 
+                    filter_idx <= 0;
+                end
+                else begin 
+                    filter_idx <= filter_idx + 1;
+                end
             end
         end
 
@@ -214,7 +223,7 @@ always @(*) begin
         fb_addr = 0;
     end
     else begin 
-        fb_addr = c_chn * Tin + filter_offset;
+        fb_addr = filter_idx * Tin + filter_offset;
     end
 end
 
