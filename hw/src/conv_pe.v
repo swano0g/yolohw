@@ -93,8 +93,6 @@ endgenerate
 
 
 
-
-
 // ------------------------------------------------------------------------------------------
 // IFM shift, FILTER
 // ------------------------------------------------------------------------------------------
@@ -107,18 +105,19 @@ always @(posedge clk or negedge rstn) begin
             end
         end
     end
-    
-    if (t_data_run || t_cal_start) begin
-        for (i = 0; i < K; i = i + 1) begin 
-            for (j = 0; j < K - 1; j = j + 1) begin 
-                in_img[i*K+j] <= in_img[i*K+j+1];
+    else begin 
+        if (t_data_run || t_cal_start) begin
+            for (i = 0; i < K; i = i + 1) begin 
+                for (j = 0; j < K - 1; j = j + 1) begin 
+                    in_img[i*K+j] <= in_img[i*K+j+1];
+                end
             end
         end
-    end
 
-    if (t_data_run) begin 
-        for (i = 0; i < K; i = i + 1) begin 
-            in_img[i*K+K-1] <= bm_ifm_data[i];
+        if (t_data_run) begin 
+            for (i = 0; i < K; i = i + 1) begin 
+                in_img[i*K+K-1] <= bm_ifm_data[i];
+            end
         end
     end
 end
@@ -144,7 +143,7 @@ always @(posedge clk or negedge rstn) begin
         // load filter
         if (load_filter) begin 
             for (i = 0; i < Tout; i = i + 1) begin 
-                filter_p[Tin*i+load_idx] <= bm_filter_data[i];
+                filter_p[$unsigned(Tin*i)+load_idx] <= bm_filter_data[i];
             end
         end
     end
@@ -165,35 +164,45 @@ wire                vld_o[0:Tout-1];
 
 // input data parsing
 always@(posedge clk or negedge rstn) begin
-
-    for (i = 0; i < Tin; i = i + 1) begin 
-        din[i] = 128'd0;
-    end
-    for (i = 0; i < Tin*Tout; i = i + 1) begin 
-        win[i] = 128'd0;
-    end
-
-    if(t_cal_start) begin
-		// Tiled IFM data
+    if (!rstn) begin 
         for (i = 0; i < Tin; i = i + 1) begin 
-            din[i][ 7: 0] = (c_is_first_row || c_is_first_col) ? 8'd0 : in_img[0 * K + 0][i*8+:8];
-            din[i][15: 8] = (c_is_first_row                  ) ? 8'd0 : in_img[0 * K + 1][i*8+:8];
-            din[i][23:16] = (c_is_first_row || c_is_last_col ) ? 8'd0 : in_img[0 * K + 2][i*8+:8];
-            
-            din[i][31:24] = (                  c_is_first_col) ? 8'd0 : in_img[1 * K + 0][i*8+:8];
-            din[i][39:32] =                                             in_img[1 * K + 1][i*8+:8];
-            din[i][47:40] = (                  c_is_last_col ) ? 8'd0 : in_img[1 * K + 2][i*8+:8];
-            
-            din[i][55:48] = (c_is_last_row  || c_is_first_col) ? 8'd0 : in_img[2 * K + 0][i*8+:8];
-            din[i][63:56] = (c_is_last_row                   ) ? 8'd0 : in_img[2 * K + 1][i*8+:8];
-            din[i][71:64] = (c_is_last_row  || c_is_last_col ) ? 8'd0 : in_img[2 * K + 2][i*8+:8];
+            din[i] = 128'd0;
         end
+        for (i = 0; i < Tin*Tout; i = i + 1) begin 
+            win[i] = 128'd0;
+        end
+    end
+    else begin 
         
-		// Tiled Filters
-        for (i = 0; i < Tin * Tout; i = i + 1) begin
-            win[i][71:0] = filter[i];
+        for (i = 0; i < Tin; i = i + 1) begin 
+            din[i] = 128'd0;
         end
-    end    
+        for (i = 0; i < Tin*Tout; i = i + 1) begin 
+            win[i] = 128'd0;
+        end
+
+        if(t_cal_start) begin
+            // Tiled IFM data
+            for (i = 0; i < Tin; i = i + 1) begin 
+                din[i][ 7: 0] = (c_is_first_row || c_is_first_col) ? 8'd0 : in_img[0 * K + 0][i*8+:8];
+                din[i][15: 8] = (c_is_first_row                  ) ? 8'd0 : in_img[0 * K + 1][i*8+:8];
+                din[i][23:16] = (c_is_first_row || c_is_last_col ) ? 8'd0 : in_img[0 * K + 2][i*8+:8];
+                
+                din[i][31:24] = (                  c_is_first_col) ? 8'd0 : in_img[1 * K + 0][i*8+:8];
+                din[i][39:32] =                                             in_img[1 * K + 1][i*8+:8];
+                din[i][47:40] = (                  c_is_last_col ) ? 8'd0 : in_img[1 * K + 2][i*8+:8];
+                
+                din[i][55:48] = (c_is_last_row  || c_is_first_col) ? 8'd0 : in_img[2 * K + 0][i*8+:8];
+                din[i][63:56] = (c_is_last_row                   ) ? 8'd0 : in_img[2 * K + 1][i*8+:8];
+                din[i][71:64] = (c_is_last_row  || c_is_last_col ) ? 8'd0 : in_img[2 * K + 2][i*8+:8];
+            end
+            
+            // Tiled Filters
+            for (i = 0; i < Tin * Tout; i = i + 1) begin
+                win[i][71:0] = filter[i];
+            end
+        end    
+    end
 end 
 
 

@@ -83,7 +83,7 @@ localparam  PE_WINDOW_DELAY     = 1;  // load window
 
 localparam  PE_PRE_CAL_DELAY    = BUF_DELAY + PE_DATA_DELAY + PE_WINDOW_DELAY; // 3
 
-localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 12 /// +2..
+localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 14
 
 
 wire t_change_filter;
@@ -106,11 +106,6 @@ reg                 filter_data_vld_pipe [0:BUF_DELAY-1];
 integer i;
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
-        for (i = 0; i < BUF_DELAY; i = i + 1) begin 
-            filter_offset_pipe[i] <= 0;
-            filter_data_vld_pipe[i] <= 0;
-        end
-
         for (i = 0; i < PE_PRE_CAL_DELAY; i = i + 1) begin 
             location_pipe[i] <= 0;
         end
@@ -129,11 +124,6 @@ always @(posedge clk or negedge rstn) begin
 
         data_vld_pipe[0] <= c_ctrl_data_run;
         location_pipe[0] <= {c_is_last_col,  c_is_first_col, c_is_last_row, c_is_first_row};
-
-        for (i = 1; i < BUF_DELAY; i = i + 1) begin 
-            filter_offset_pipe[i] <= filter_offset_pipe[i-1];
-            filter_data_vld_pipe[i] <= filter_data_vld_pipe[i-1];
-        end
 
         for (i = 1; i < PE_PRE_CAL_DELAY; i = i + 1) begin 
             location_pipe[i] <= location_pipe[i-1];
@@ -169,14 +159,21 @@ reg [BUF_AW-1:0] fb_addr;
 always @(posedge clk or negedge rstn) begin 
     if (!rstn) begin 
         //reset
+        for (i = 0; i < BUF_DELAY; i = i + 1) begin 
+            filter_offset_pipe[i] <= 0;
+            filter_data_vld_pipe[i] <= 0;
+        end
+
         filter_loaded <= 0;
         filter_offset <= 0;
         filter_idx <= 0;
         fb_req <= 0;
     end
     else begin 
-        filter_data_vld_pipe[0] <= 0;
-        filter_offset_pipe[0] <= 0;
+        for (i = 1; i < BUF_DELAY; i = i + 1) begin 
+            filter_offset_pipe[i] <= filter_offset_pipe[i-1];
+            filter_data_vld_pipe[i] <= filter_data_vld_pipe[i-1];
+        end
 
         // possible to load filter
         if (!filter_loaded && !fb_req && (c_ctrl_data_run || c_ctrl_hsync_run)) begin 
@@ -185,10 +182,6 @@ always @(posedge clk or negedge rstn) begin
             filter_offset_pipe[0] <= filter_offset;
         end
         else if (fb_req) begin 
-            filter_offset <= filter_offset + 1;
-            filter_data_vld_pipe[0] <= 1;
-            filter_offset_pipe[0] <= filter_offset;
-            
             // end
             if (filter_offset == Tin - 1) begin 
                 fb_req <= 0;
@@ -196,6 +189,7 @@ always @(posedge clk or negedge rstn) begin
                 filter_offset <= 0;
                 filter_data_vld_pipe[0] <= 0;
                 filter_offset_pipe[0] <= 0;
+
                 if (filter_idx == q_channel - 1) begin 
                     filter_idx <= 0;
                 end
@@ -203,6 +197,15 @@ always @(posedge clk or negedge rstn) begin
                     filter_idx <= filter_idx + 1;
                 end
             end
+            else begin 
+                filter_offset <= filter_offset + 1;
+                filter_data_vld_pipe[0] <= 1;
+                filter_offset_pipe[0] <= filter_offset;
+            end
+        end
+        else begin 
+            filter_data_vld_pipe[0] <= 0;
+            filter_offset_pipe[0] <= 0;
         end
 
         // change filter
