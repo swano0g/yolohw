@@ -44,6 +44,8 @@ module cnn_ctrl #(
     output wire                     o_is_last_row,
     output wire                     o_is_first_col,
     output wire                     o_is_last_col,
+    output wire                     o_is_first_chn,
+    output wire                     o_is_last_chn,
     
     output wire [W_SIZE-1:0]        o_row,
     output wire [W_SIZE-1:0]        o_col,
@@ -89,7 +91,8 @@ wire                    is_first_row = (row == 0) ? 1'b1: 1'b0;
 wire                    is_last_row  = (row == q_height-1) ? 1'b1: 1'b0;
 wire                    is_first_col = (col == 0) ? 1'b1: 1'b0;
 wire                    is_last_col  = (col == q_width-1) ? 1'b1 : 1'b0;
-
+wire                    is_first_chn = (chn == 0) ? 1'b1: 1'b0;
+wire                    is_last_chn  = (chn == q_channel-1) ? 1'b1 : 1'b0;
 
 
 // State register
@@ -115,7 +118,7 @@ always @(*) begin
         ST_DATA:  
             nstate = 
                 end_frame                           ? ST_IDLE   : 
-                (chn == q_channel-1 && is_last_col) ? ST_HSYNC  : 
+                (is_last_chn && is_last_col)        ? ST_HSYNC  : 
                                                       ST_DATA   ;
         default:  
             nstate = ST_IDLE;
@@ -230,6 +233,8 @@ assign o_is_first_row   = is_first_row;
 assign o_is_last_row    = is_last_row;
 assign o_is_first_col   = is_first_col;
 assign o_is_last_col    = is_last_col;
+assign o_is_first_chn   = is_first_chn;
+assign o_is_last_chn    = is_last_chn;
 
 assign o_ifm_buf_req_row    = ifm_buf_req_row;
 assign o_ifm_buf_req_load   = ifm_buf_req_load;
