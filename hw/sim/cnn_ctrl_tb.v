@@ -7,9 +7,6 @@ module cnn_ctrl_tb;
     parameter W_FRAME_SIZE  = `W_FRAME_SIZE;
     parameter W_DELAY       = `W_DELAY;
     
-    parameter IFM_BUF_CNT   = `IFM_BUFFER_CNT;       // 4
-    parameter W_IFM_BUF     = `IFM_BUFFER;         // 2
-    
     parameter WIDTH         = 256;
     parameter HEIGHT        = 256;
     parameter CHANNEL       = 4;

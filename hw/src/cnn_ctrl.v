@@ -6,10 +6,7 @@ module cnn_ctrl #(
     parameter W_SIZE        = `W_SIZE,
     parameter W_CHANNEL     = `W_CHANNEL,
     parameter W_FRAME_SIZE  = `W_FRAME_SIZE,
-    parameter W_DELAY       = `W_DELAY,
-    
-    parameter IFM_BUF_CNT   = `IFM_BUFFER_CNT,      // 4
-    parameter W_IFM_BUF     = `IFM_BUFFER           // 2
+    parameter W_DELAY       = `W_DELAY
 )(
     input  wire                     clk,
     input  wire                     rstn,
