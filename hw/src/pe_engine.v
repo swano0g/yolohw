@@ -19,8 +19,9 @@ module pe_engine #(
     parameter W_PSUM        = `W_PSUM,
     parameter PE_DELAY      = `PE_DELAY,
 
-    parameter NB_IFM        = `IFM_BUFFER_CNT,
     parameter BUF_AW        = `BUFFER_ADDRESS_BW,
+
+    parameter FILTER_BUF_AW = `FILTER_BUFFER_AW,
 
     parameter NB_FILTER     = `FILTER_BUFFER_CNT,
     
@@ -59,7 +60,7 @@ module pe_engine #(
 
     // FILTER buffer
     output wire                     o_fb_req,
-    output wire [BUF_AW-1:0]        o_fb_addr,
+    output wire [FILTER_BUF_AW-1:0] o_fb_addr,
 
     input  wire [FILTER_DW-1:0]     fb_data0_in,
     input  wire [FILTER_DW-1:0]     fb_data1_in,
@@ -123,7 +124,7 @@ always @(posedge clk or negedge rstn) begin
         chn_pipe[0] <= c_chn;
 
         data_vld_pipe[0] <= c_ctrl_data_run;
-        location_pipe[0] <= {c_is_last_col,  c_is_first_col, c_is_last_row, c_is_first_row};
+        location_pipe[0] <= {c_is_last_col, c_is_first_col, c_is_last_row, c_is_first_row};
 
         for (i = 1; i < PE_PRE_CAL_DELAY; i = i + 1) begin 
             location_pipe[i] <= location_pipe[i-1];
@@ -142,7 +143,7 @@ end
 
 
 // 2. ifm
-wire [PE_IFM_FLAT_BW-1:0] ib_data_flat  = {ib_data2_in, ib_data1_in, ib_data0_in};
+wire [PE_IFM_FLAT_BW-1:0] ib_data_flat = {ib_data2_in, ib_data1_in, ib_data0_in};
 
 
 // 3. filter
@@ -154,7 +155,7 @@ reg [W_Tin-1:0] filter_offset;
 reg [W_CHANNEL-1:0] filter_idx;
 
 reg fb_req;
-reg [BUF_AW-1:0] fb_addr;
+reg [FILTER_BUF_AW-1:0] fb_addr;
 
 always @(posedge clk or negedge rstn) begin 
     if (!rstn) begin 

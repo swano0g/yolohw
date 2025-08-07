@@ -74,6 +74,22 @@ reg	[DW-1			:	0]		rdata;
 				.doutb   (dob)
 			);
 	    end
+		// filter buffer (4.5KB)
+        else if((DEPTH == 512) && (DW == 72)) begin: gen_dpram_512x72
+			dpram_512x72 u_dpram_512x72 (
+				// write ports
+				.clka    (clk),
+				.ena     (ena),
+				.wea     (wea),
+				.addra   (addra),
+				.dina    (dia),
+				// read ports 
+				.clkb    (clk),
+				.enb     (enb),
+				.addrb   (addrb),
+				.doutb   (dob)
+			);
+	    end
 	endgenerate
 `else
 	//------------------------------------------------------------------------+

@@ -6,19 +6,19 @@ module buf_manager #(
     parameter W_SIZE        = `W_SIZE,
     parameter W_CHANNEL     = `W_CHANNEL,
 
-    parameter IFM_DW        = `IFM_DW,
-    parameter FILTER_DW     = `FILTER_DW,
 
-    parameter BUF_AW        = `BUFFER_ADDRESS_BW,
-    
-    parameter IFM_BUF_CNT   = `IFM_BUFFER_CNT,      // 4
-    parameter W_IFM_BUF     = `IFM_BUFFER,           // 2
+    parameter IFM_DW        = `IFM_DW,  // 32
+    parameter FILTER_DW     = `FILTER_DW,   // 72
 
-    parameter IFM_DEPTH   = 65536,  // 256KB / 4B
-    parameter IFM_AW      = $clog2(IFM_DEPTH),  // 256KB / 4B
 
-    parameter ROW_DEPTH   = 1536,    // 6KB  / 4
-    parameter ROW_AW      = $clog2(ROW_DEPTH)
+    parameter FILTER_DEPTH = `FILTER_BUFFER_DEPTH,
+    parameter FILTER_AW    = `FILTER_BUFFER_AW,
+
+    parameter IFM_DEPTH   = `IFM_TOTAL_BUFFER_DEPTH,
+    parameter IFM_AW      = `IFM_TOTAL_BUFFER_AW,
+
+    parameter ROW_DEPTH   = `IFM_ROW_BUFFER_DEPTH,
+    parameter ROW_AW      = `IFM_ROW_BUFFER_AW
 )(
     input  wire               clk,
     input  wire               rstn,
@@ -29,7 +29,7 @@ module buf_manager #(
     input  wire [W_CHANNEL-1:0]     q_channel,   // TILED input channel
     input  wire [W_SIZE+W_CHANNEL-1:0] q_row_stride, // q_width * q_channel
 
-    input  wire [4:0]               q_layer,            // 몇번째 레이어인지
+    input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용
 
     input  wire                     q_load_ifm,         // ifm 로드 시작 시그널
     output wire                     o_load_ifm_done,    // ifm 로드 완료 시그널
@@ -40,9 +40,7 @@ module buf_manager #(
 
     // Buffer Manager <-> AXI
     // AXI signals to load ifm, filter
-
-
-
+    //
 
     // Buffer Manager <-> Controller 
     input  wire                         c_ctrl_data_run,
@@ -58,9 +56,11 @@ module buf_manager #(
     input  wire                         c_is_last_chn,
 
 
+    // not use
     input  wire                 m_req_load,         // new row load request
     input  wire [W_SIZE-1:0]    m_req_row,          // req row idx
     output reg                  o_req_done,         // req done signal
+
 
     // Buffer Manager <-> pe_engine (IFM)
     output wire [IFM_DW-1:0]        ib_data0_out,
@@ -69,7 +69,7 @@ module buf_manager #(
 
     // Buffer Manager <-> pe_engine (FILTER)
     input  wire                     fb_req,
-    input  wire [BUF_AW-1:0]        fb_addr,
+    input  wire [FILTER_AW-1:0]     fb_addr,
 
     output wire [FILTER_DW-1:0]     fb_data0_out,
     output wire [FILTER_DW-1:0]     fb_data1_out,
@@ -78,7 +78,7 @@ module buf_manager #(
 );
 
 //============================================================================
-// 1) fill ifm buffer (AXI)
+// 1) ifm buffer & AXI
 //============================================================================
 wire [IFM_AW-1:0]    ifm_buf_read_addr;
 wire [IFM_DW-1:0]    ifm_buf_read_data;
@@ -86,16 +86,16 @@ wire [IFM_DW-1:0]    ifm_buf_read_data;
 
 // dpram_65536x32, 전체 ifm을 저장할 퍼버
 dpram_wrapper #(
-    .DEPTH  (IFM_DEPTH      ),
-    .AW     (IFM_AW         ),
-    .DW     (IFM_DW         ))
+    .DEPTH  (IFM_DEPTH        ),
+    .AW     (IFM_AW           ),
+    .DW     (IFM_DW           ))
 u_ifm_buf(    
-    .clk	(clk		    ),
+    .clk	(clk		      ),
     // write port
-    .ena	( ),
-	.addra	( ),
-	.wea	( ),
-	.dia	( ),
+    .ena	(/* AXI         */),
+	.addra	(/* AXI         */),
+	.wea	(/* AXI         */),
+	.dia	(/* AXI         */),
     // read port
     .enb    (1'd1             ),  // Always Read       
     .addrb	(ifm_buf_read_addr),
@@ -107,22 +107,68 @@ u_ifm_buf(
 
 
 //============================================================================
-// 2) fill filter buffer (AXI)
+// 2) filter buffer & AXI
 //============================================================================
-// dpram_512x72, filter 저장할 퍼버
+
+// dpram_512x72, filter 저장할 퍼버 & 4개
 dpram_wrapper #(
-    .DEPTH  (BUFF_DEPTH     ),
-    .AW     (BUFF_ADDR_W    ),
-    .DW     (AXI_WIDTH_DA   ))
-u_filter_buf(    
+    .DEPTH  (FILTER_DEPTH   ),
+    .AW     (FILTER_AW      ),
+    .DW     (FILTER_DW      ))
+u_filter_buf0(    
     .clk	(clk		    ),
-    .ena	( ),
-	.addra	( ),
-	.wea	( ),
-	.dia	( ),
-    .enb    ( ),
-    .addrb	( ),
-    .dob	( )
+    .ena	(/* AXI       */),
+	.addra	(/* AXI       */),
+	.wea	(/* AXI       */),
+	.dia	(/* AXI       */),
+    .enb    (fb_req         ), 
+    .addrb	(fb_addr        ),
+    .dob	(fb_data0_out   )
+);
+
+dpram_wrapper #(
+    .DEPTH  (FILTER_DEPTH   ),
+    .AW     (FILTER_AW      ),
+    .DW     (FILTER_DW      ))
+u_filter_buf1(    
+    .clk	(clk		    ),
+    .ena	(/* AXI       */),
+	.addra	(/* AXI       */),
+	.wea	(/* AXI       */),
+	.dia	(/* AXI       */),
+    .enb    (fb_req         ), 
+    .addrb	(fb_addr        ),
+    .dob	(fb_data1_out   )
+);
+
+dpram_wrapper #(
+    .DEPTH  (FILTER_DEPTH   ),
+    .AW     (FILTER_AW      ),
+    .DW     (FILTER_DW      ))
+u_filter_buf2(    
+    .clk	(clk		    ),
+    .ena	(/* AXI       */),
+	.addra	(/* AXI       */),
+	.wea	(/* AXI       */),
+	.dia	(/* AXI       */),
+    .enb    (fb_req         ), 
+    .addrb	(fb_addr        ),
+    .dob	(fb_data2_out   )
+);
+
+dpram_wrapper #(
+    .DEPTH  (FILTER_DEPTH   ),
+    .AW     (FILTER_AW      ),
+    .DW     (FILTER_DW      ))
+u_filter_buf3(    
+    .clk	(clk		    ),
+    .ena	(/* AXI       */),
+	.addra	(/* AXI       */),
+	.wea	(/* AXI       */),
+	.dia	(/* AXI       */),
+    .enb    (fb_req         ), 
+    .addrb	(fb_addr        ),
+    .dob	(fb_data3_out   )
 );
 //============================================================================
 
@@ -136,7 +182,6 @@ localparam ABV = 2'd0, // row - 1
            CUR = 2'd1, // row
            BEL = 2'd2; // row + 1
 
-// 포인터: row buffer 인덱스 (0,1,2)
 reg  [1:0] ptr_row0, ptr_row1, ptr_row2;
 
 always @(posedge clk or negedge rstn) begin
@@ -223,9 +268,11 @@ u_row_buf2(
 
 
 // b) supply row buf
-row0_wea = c_ctrl_data_run && (ptr_row0 == BEL);
-row1_wea = c_ctrl_data_run && (ptr_row1 == BEL);
-row2_wea = c_ctrl_data_run && (ptr_row2 == BEL);
+always @(*) begin 
+    row0_wea = c_ctrl_data_run && (ptr_row0 == BEL);
+    row1_wea = c_ctrl_data_run && (ptr_row1 == BEL);
+    row2_wea = c_ctrl_data_run && (ptr_row2 == BEL);
+end
 
 //============================================================================
 
@@ -254,7 +301,7 @@ wire [ROW_AW-1:0] next_row_offset =
                                                       (reg_row_addr + q_channel); // same channel, next col
 
 
-wire [IFM_AW-1:0] next_ifm_addr = row_base + next_row_offset;
+wire [IFM_AW-1:0] next_ifm_addr = row_base + {{IFM_AW-ROW_AW{1'b0}}, next_row_offset};
 
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
@@ -285,30 +332,21 @@ assign row_buf_read_addr = reg_row_addr;
 //============================================================================
 always @(*) begin
     case({ptr_row0, ptr_row1, ptr_row2})
-        {ABV, _, _}: ib_data0_out = row0_dout;
-        {_, ABV, _}: ib_data0_out = row1_dout;
-        {_, _, ABV}: ib_data0_out = row2_dout;
+        {ABV, 2'b??, 2'b??}: ib_data0_out = row0_dout;
+        {2'b??, ABV, 2'b??}: ib_data0_out = row1_dout;
+        {2'b??, 2'b??, ABV}: ib_data0_out = row2_dout;
         default:     ib_data0_out = {IFM_DW{1'b0}};
     endcase
 
     case({ptr_row0, ptr_row1, ptr_row2})
-        {CUR, _, _}: ib_data1_out = row0_dout;
-        {_, CUR, _}: ib_data1_out = row1_dout;
-        {_, _, CUR}: ib_data1_out = row2_dout;
+        {CUR, 2'b??, 2'b??}: ib_data1_out = row0_dout;
+        {2'b??, CUR, 2'b??}: ib_data1_out = row1_dout;
+        {2'b??, 2'b??, CUR}: ib_data1_out = row2_dout;
         default:     ib_data1_out = {IFM_DW{1'b0}};
     endcase
     
     ib_data2_out = c_is_last_row ? {IFM_DW{1'b0}} : ifm_buf_read_data;
 end
-//============================================================================
-
-
-
-
-//============================================================================
-// 8) connect btw filter buf & output registers
-//============================================================================
-
 //============================================================================
 
 
