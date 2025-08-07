@@ -112,6 +112,8 @@ module pe_engine_tb;
     wire                     is_last_row;
     wire                     is_first_col;
     wire                     is_last_col; 
+    wire                     is_first_chn;
+    wire                     is_last_chn; 
 
     cnn_ctrl u_cnn_ctrl (
         .clk               (clk               ),
@@ -134,6 +136,8 @@ module pe_engine_tb;
         .o_is_last_row     (is_last_row       ),
         .o_is_first_col    (is_first_col      ),
         .o_is_last_col     (is_last_col       ),
+        .o_is_first_chn    (is_first_chn      ),
+        .o_is_last_chn     (is_last_chn       ),
         .o_row             (row               ),
         .o_col             (col               ),
         .o_chn             (chn               ),
