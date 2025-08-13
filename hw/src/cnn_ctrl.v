@@ -22,8 +22,10 @@ module cnn_ctrl #(
     input  wire [W_FRAME_SIZE-1:0]  q_frame_size,
     input  wire                     q_start,
 
+    input  wire                     pe_csync_done,
+
     // buffer manager
-    input  wire                     fb_load_done,
+    // input  wire                     fb_load_done,       // not used
     input  wire                     pb_sync_done,
     
     output wire                     o_fb_load_req,
@@ -98,7 +100,7 @@ always @(*) begin
         ST_IDLE:  
             nstate = q_start ? ST_CSYNC : ST_IDLE;
         ST_CSYNC: 
-            nstate = fb_load_done ? ST_DATA : ST_CSYNC;
+            nstate = pe_csync_done ? ST_DATA : ST_CSYNC;
         ST_PSYNC: 
             nstate = pb_sync_done ? ST_IDLE : ST_PSYNC;
         ST_DATA:  

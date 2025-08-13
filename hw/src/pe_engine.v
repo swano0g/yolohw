@@ -38,19 +38,21 @@ module pe_engine #(
   
     // controller -> PE engine
     input  wire                         c_ctrl_data_run,
-    input  wire                         c_ctrl_hsync_run,
+    input  wire                         c_ctrl_csync_run,
     input  wire [W_SIZE-1:0]            c_row,
     input  wire [W_SIZE-1:0]            c_col,
     input  wire [W_CHANNEL-1:0]         c_chn,
-    input  wire [W_FRAME_SIZE-1:0]      c_data_count,
-    input  wire                         c_end_frame,
+    // input  wire [W_FRAME_SIZE-1:0]      c_data_count,
+    // input  wire                         c_end_frame,
 
-    input wire                          c_is_first_row,
-    input wire                          c_is_last_row,
-    input wire                          c_is_first_col,
-    input wire                          c_is_last_col,
+    input  wire                         c_is_first_row,
+    input  wire                         c_is_last_row,
+    input  wire                         c_is_first_col,
+    input  wire                         c_is_last_col,
 
     input  wire [W_SIZE-1:0]            q_channel,      // tiled input channel
+
+    output wire                         pe_csync_done,
 
 
     // IFM buffer
@@ -59,6 +61,8 @@ module pe_engine #(
     input  wire [IFM_DW-1:0]        ib_data2_in,
 
     // FILTER buffer
+    input  wire                     fb_req_possible,
+
     output wire                     o_fb_req,
     output wire [FILTER_BUF_AW-1:0] o_fb_addr,
 
@@ -177,7 +181,7 @@ always @(posedge clk or negedge rstn) begin
         end
 
         // possible to load filter
-        if (!filter_loaded && !fb_req && (c_ctrl_data_run || c_ctrl_hsync_run)) begin 
+        if (!filter_loaded && !fb_req && fb_req_possible) begin 
             fb_req <= 1;
             filter_data_vld_pipe[0] <= 1;
             filter_offset_pipe[0] <= filter_offset;
@@ -233,6 +237,24 @@ assign o_fb_addr = fb_addr;
 assign t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_PRE_CAL_DELAY-2][2];
 
 
+// pe csync done signal
+reg csync_done;
+
+always @(posedge clk or negedge rstn) begin 
+    if (!rstn) begin 
+        csync_done <= 0;
+    end else begin 
+        if (filter_loaded && c_ctrl_csync_run) begin 
+            csync_done <= 1;
+        end else begin 
+            csync_done <= 0;
+        end
+    end   
+end
+
+assign pe_csync_done = csync_done;
+
+
 
 // 4. psum (incomplete)
 // for debugging
@@ -277,27 +299,27 @@ end
 
 // 5. DUT: conv_pe
 conv_pe u_conv_pe(
-    ./*input    */clk           (clk                              ),
-    ./*input    */rstn          (rstn                             ),
-    ./*input    */t_data_run    (data_vld_pipe[BUF_DELAY-1]       ),
-    ./*input    */t_cal_start   (data_vld_pipe[PE_PRE_CAL_DELAY-1]),
+    ./*input    */clk                (clk                                 ),
+    ./*input    */rstn               (rstn                                ),
+    ./*input    */t_data_run         (data_vld_pipe[BUF_DELAY-1]          ),
+    ./*input    */t_cal_start        (data_vld_pipe[PE_PRE_CAL_DELAY-1]   ),
 
-    ./*input    */c_is_first_row(location_pipe[PE_PRE_CAL_DELAY-1][0]),
-    ./*input    */c_is_last_row (location_pipe[PE_PRE_CAL_DELAY-1][1]),
-    ./*input    */c_is_first_col(location_pipe[PE_PRE_CAL_DELAY-1][2]),
-    ./*input    */c_is_last_col (location_pipe[PE_PRE_CAL_DELAY-1][3]),
+    ./*input    */c_is_first_row     (location_pipe[PE_PRE_CAL_DELAY-1][0]),
+    ./*input    */c_is_last_row      (location_pipe[PE_PRE_CAL_DELAY-1][1]),
+    ./*input    */c_is_first_col     (location_pipe[PE_PRE_CAL_DELAY-1][2]),
+    ./*input    */c_is_last_col      (location_pipe[PE_PRE_CAL_DELAY-1][3]),
 
     // IFM BUFFER
-    ./*input    */bm_ifm_data_flat   (ib_data_flat     ),
+    ./*input    */bm_ifm_data_flat   (ib_data_flat                        ),
 
     // FILTER BUFFER 
-    ./*input    */change_filter      (t_change_filter                     ),    // is_first_col
+    ./*input    */change_filter      (t_change_filter                     ),
     ./*input    */load_filter        (filter_data_vld_pipe[BUF_DELAY-1]   ),
     ./*input    */load_idx           (filter_offset_pipe[BUF_DELAY-1]     ),
     ./*input    */bm_filter_data_flat(fb_data_flat                        ),
 
-    ./*output   */o_acc (acc_flat),
-    ./*output   */o_vld (vld)
+    ./*output   */o_acc              (acc_flat                            ),
+    ./*output   */o_vld              (vld                                 )
 );
 
 

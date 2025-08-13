@@ -62,7 +62,7 @@ module cnn_ctrl_tb;
         .q_frame_size      (q_frame_size      ),
         .q_start           (q_start           ),
 
-        .fb_load_done      (fb_load_done      ),
+        .fb_load_done      (fb_load_done      ),    // not used
         .pb_sync_done      (pb_sync_done      ),
 
         // Outputs
@@ -107,7 +107,6 @@ module cnn_ctrl_tb;
         end else begin
             fb_load_done  <= 1'b0;  // 기본값(펄스용)
 
-            // 요청 수신: fb_load_req는 1사이클이므로 level 트리거로 OK
             if (fb_load_req && !f_loading) begin
                 f_loading  <= 1'b1;
                 f_load_cnt <= 7'd0;
