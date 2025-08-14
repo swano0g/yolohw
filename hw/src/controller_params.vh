@@ -46,6 +46,8 @@
 `define BUFFER_ADDRESS_BW   14
 //
 
+`define BM_DELAY            2   // (index -> data) delay
+
 `define FILTER_BUFFER_CNT       `Tout
 `define FILTER_BUFFER_DW        `FILTER_DW // 72
 `define FILTER_BUFFER_DEPTH     512

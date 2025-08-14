@@ -22,6 +22,7 @@ module cnn_ctrl #(
     input  wire [W_FRAME_SIZE-1:0]  q_frame_size,
     input  wire                     q_start,
 
+    input  wire                     bm_csync_done,
     input  wire                     pe_csync_done,
 
     // buffer manager
@@ -95,12 +96,14 @@ always @(posedge clk or negedge rstn) begin
 end
 
 // Next-state logic
+wire csync_done = pe_csync_done & bm_csync_done;
+
 always @(*) begin
     case (cstate)
         ST_IDLE:  
             nstate = q_start ? ST_CSYNC : ST_IDLE;
         ST_CSYNC: 
-            nstate = pe_csync_done ? ST_DATA : ST_CSYNC;
+            nstate = csync_done ? ST_DATA : ST_CSYNC;
         ST_PSYNC: 
             nstate = pb_sync_done ? ST_IDLE : ST_PSYNC;
         ST_DATA:  

@@ -104,6 +104,7 @@ module pe_engine_tb;
     // wire                     end_frame;
 
     wire                     fb_load_req;
+    wire                     bm_csync_done;
     
     wire                     is_first_row;
     wire                     is_last_row;
@@ -127,6 +128,7 @@ module pe_engine_tb;
         .q_start           (q_start           ),
         // .fb_load_done      (fb_load_done      ),
         .pb_sync_done      (pb_sync_done      ),
+        .bm_csync_done     (bm_csync_done     ),
         .pe_csync_done     (pe_csync_done     ),
         // Outputs
         .o_ctrl_csync_run  (ctrl_csync_run    ),
@@ -167,7 +169,7 @@ module pe_engine_tb;
 
         .q_channel(q_channel),
 
-        .pe_csync_done(pe_csync_done),
+        .o_pe_csync_done(pe_csync_done),
         
         .ib_data0_in(ifm_data_0), 
         .ib_data1_in(ifm_data_1), 
@@ -191,8 +193,10 @@ module pe_engine_tb;
     //----------------------------------------------------------------------  
     // 6) IFM buffer mimic (assume already loaded)
     //----------------------------------------------------------------------  
-
+    // bm 2 cycle delay
     reg [BUF_AW-1:0] ifm_base_addr;
+
+    reg [IFM_DW-1:0] ifm_data_0_p, ifm_data_1_p, ifm_data_2_p;
 
     initial begin 
         ifm_base_addr = 0;
@@ -200,28 +204,35 @@ module pe_engine_tb;
         ifm_data_0       = {IFM_DW{1'b0}};
         ifm_data_1       = {IFM_DW{1'b0}};
         ifm_data_2       = {IFM_DW{1'b0}};
+        ifm_data_0_p       = {IFM_DW{1'b0}};
+        ifm_data_1_p       = {IFM_DW{1'b0}};
+        ifm_data_2_p       = {IFM_DW{1'b0}};
     end
     
     always @(posedge clk or negedge rstn) begin 
         if (ctrl_data_run) begin 
             ifm_base_addr = col * TEST_T_CHNIN + chn;
             if (row == 0) begin 
-                ifm_data_0 <= 0;
-                ifm_data_1 <= ifmbuf0[ifm_base_addr];
-                ifm_data_2 <= ifmbuf1[ifm_base_addr];
+                ifm_data_0_p <= 0;
+                ifm_data_1_p <= ifmbuf0[ifm_base_addr];
+                ifm_data_2_p <= ifmbuf1[ifm_base_addr];
             end
             else if (row == 1) begin
-                ifm_data_0 <= ifmbuf0[ifm_base_addr];
-                ifm_data_1 <= ifmbuf1[ifm_base_addr];
-                ifm_data_2 <= ifmbuf2[ifm_base_addr];
+                ifm_data_0_p <= ifmbuf0[ifm_base_addr];
+                ifm_data_1_p <= ifmbuf1[ifm_base_addr];
+                ifm_data_2_p <= ifmbuf2[ifm_base_addr];
             end
             else if (row == 2) begin 
-                ifm_data_0 <= ifmbuf1[ifm_base_addr];
-                ifm_data_1 <= ifmbuf2[ifm_base_addr];
-                ifm_data_2 <= 0;
+                ifm_data_0_p <= ifmbuf1[ifm_base_addr];
+                ifm_data_1_p <= ifmbuf2[ifm_base_addr];
+                ifm_data_2_p <= 0;
             end 
         end
+        ifm_data_0       <= ifm_data_0_p;
+        ifm_data_1       <= ifm_data_1_p;
+        ifm_data_2       <= ifm_data_2_p;
     end
+    
     
     //----------------------------------------------------------------------  
     // 7) FILTER buffer mimic
@@ -235,6 +246,8 @@ module pe_engine_tb;
     assign filter_buf_done = filter_loaded && !filter_loaded_d;
     
     assign fb_req_possible = filter_loaded;
+
+    assign bm_csync_done =filter_loaded;
 
     initial begin 
         filter_loaded = 0;

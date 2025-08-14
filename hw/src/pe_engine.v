@@ -14,6 +14,7 @@ module pe_engine #(
     parameter Tout          = `Tout,
     parameter W_Tin         = `W_Tin,
     
+    parameter BM_DELAY      = `BM_DELAY,
     parameter IFM_DW        = `IFM_DW,
     parameter FILTER_DW     = `FILTER_DW,
     parameter W_PSUM        = `W_PSUM,
@@ -52,7 +53,7 @@ module pe_engine #(
 
     input  wire [W_SIZE-1:0]            q_channel,      // tiled input channel
 
-    output wire                         pe_csync_done,
+    output wire                         o_pe_csync_done,
 
 
     // IFM buffer
@@ -82,13 +83,14 @@ module pe_engine #(
     // output wire                     o_pe_done,   // maybe needed for psum logic
 );
 
-localparam  BUF_DELAY           = 1;  // (calculate index 0 cycle ->) buf -> pe
+localparam  IB_DELAY           = BM_DELAY;  // 2 calculate index -> buf -> pe
+localparam  FB_DELAY           = 1;
 localparam  PE_DATA_DELAY       = 1;  // pe save data
 localparam  PE_WINDOW_DELAY     = 1;  // load window
 
-localparam  PE_PRE_CAL_DELAY    = BUF_DELAY + PE_DATA_DELAY + PE_WINDOW_DELAY; // 3
+localparam  PE_PRE_CAL_DELAY    = IB_DELAY + PE_DATA_DELAY + PE_WINDOW_DELAY; // 4
 
-localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 14
+localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 15
 
 
 wire t_change_filter;
@@ -104,8 +106,8 @@ reg                 data_vld_pipe [0:STG-1];   // when data goes into pe
 reg [3:0]           location_pipe [0:PE_PRE_CAL_DELAY-1];   // when start calculation
 
 // for filter load
-reg [W_Tin-1:0]     filter_offset_pipe   [0:BUF_DELAY-1];
-reg                 filter_data_vld_pipe [0:BUF_DELAY-1];
+reg [W_Tin-1:0]     filter_offset_pipe   [0:FB_DELAY-1];
+reg                 filter_data_vld_pipe [0:FB_DELAY-1];
 
 
 integer i;
@@ -164,7 +166,7 @@ reg [FILTER_BUF_AW-1:0] fb_addr;
 always @(posedge clk or negedge rstn) begin 
     if (!rstn) begin 
         //reset
-        for (i = 0; i < BUF_DELAY; i = i + 1) begin 
+        for (i = 0; i < FB_DELAY; i = i + 1) begin 
             filter_offset_pipe[i] <= 0;
             filter_data_vld_pipe[i] <= 0;
         end
@@ -175,7 +177,7 @@ always @(posedge clk or negedge rstn) begin
         fb_req <= 0;
     end
     else begin 
-        for (i = 1; i < BUF_DELAY; i = i + 1) begin 
+        for (i = 1; i < FB_DELAY; i = i + 1) begin 
             filter_offset_pipe[i] <= filter_offset_pipe[i-1];
             filter_data_vld_pipe[i] <= filter_data_vld_pipe[i-1];
         end
@@ -252,7 +254,7 @@ always @(posedge clk or negedge rstn) begin
     end   
 end
 
-assign pe_csync_done = csync_done;
+assign o_pe_csync_done = csync_done;
 
 
 
@@ -301,7 +303,7 @@ end
 conv_pe u_conv_pe(
     ./*input    */clk                (clk                                 ),
     ./*input    */rstn               (rstn                                ),
-    ./*input    */t_data_run         (data_vld_pipe[BUF_DELAY-1]          ),
+    ./*input    */t_data_run         (data_vld_pipe[IB_DELAY-1]          ),
     ./*input    */t_cal_start        (data_vld_pipe[PE_PRE_CAL_DELAY-1]   ),
 
     ./*input    */c_is_first_row     (location_pipe[PE_PRE_CAL_DELAY-1][0]),
@@ -314,8 +316,8 @@ conv_pe u_conv_pe(
 
     // FILTER BUFFER 
     ./*input    */change_filter      (t_change_filter                     ),
-    ./*input    */load_filter        (filter_data_vld_pipe[BUF_DELAY-1]   ),
-    ./*input    */load_idx           (filter_offset_pipe[BUF_DELAY-1]     ),
+    ./*input    */load_filter        (filter_data_vld_pipe[FB_DELAY-1]   ),
+    ./*input    */load_idx           (filter_offset_pipe[FB_DELAY-1]     ),
     ./*input    */bm_filter_data_flat(fb_data_flat                        ),
 
     ./*output   */o_acc              (acc_flat                            ),

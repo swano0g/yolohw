@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `include "controller_params.vh"
 
-//`define FPGA 1
+`define FPGA 1
 module dpram_wrapper  #(
     parameter integer DW      = 32,       // data bit-width per word
     parameter integer AW      = 16,       // address bit-width → 2^16 = 65 536 words
