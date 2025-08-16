@@ -14,7 +14,7 @@ module pe_engine #(
     parameter Tout          = `Tout,
     parameter W_Tin         = `W_Tin,
     
-    parameter BM_DELAY      = `BM_DELAY,
+    parameter BM_DELAY      = `BM_IB_DELAY,
     parameter IFM_DW        = `IFM_DW,
     parameter FILTER_DW     = `FILTER_DW,
     parameter W_PSUM        = `W_PSUM,

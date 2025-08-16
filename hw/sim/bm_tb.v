@@ -132,8 +132,6 @@ module bm_tb;
     wire [W_SIZE-1:0]        col;
     wire [W_CHANNEL-1:0]     chn;
     wire [W_CHANNEL-1:0]     chn_out;
-    // wire [W_FRAME_SIZE-1:0]  data_count;
-    // wire                     end_frame;
 
     wire                     fb_load_req;
     
@@ -277,7 +275,6 @@ module bm_tb;
         .c_row(row),
         .c_col(col),
         .c_chn(chn),
-        // .c_data_count(data_count),
         .c_is_first_row(is_first_row),
         .c_is_last_row (is_last_row),
         .c_is_first_col(is_first_col),
@@ -431,7 +428,6 @@ module bm_tb;
 
             @(posedge clk); wait (ctrl_csync_run == 1'b1);
 
-            // mimic dram latency
             dly = $random & 8'h7; repeat(dly) @(posedge clk);
             tb_axi_fb0(words, dram_base0);
             dly = $random & 8'h7; repeat(dly) @(posedge clk);

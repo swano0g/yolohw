@@ -6,7 +6,7 @@ module buffer_manager #(
     parameter W_SIZE        = `W_SIZE,
     parameter W_CHANNEL     = `W_CHANNEL,
 
-    parameter BM_DELAY      = `BM_DELAY,
+    parameter BM_DELAY      = `BM_IB_DELAY - 1, // 2; output port reg -> only 2cycle delay inside BM
     parameter IFM_DW        = `IFM_DW,  // 32
     parameter FILTER_DW     = `FILTER_DW,   // 72
 
@@ -87,9 +87,9 @@ module buffer_manager #(
 
 
     // Buffer Manager <-> pe_engine (IFM)
-    output wire [IFM_DW-1:0]        ib_data0_out,
-    output wire [IFM_DW-1:0]        ib_data1_out,
-    output wire [IFM_DW-1:0]        ib_data2_out,
+    output reg [IFM_DW-1:0]        ib_data0_out,
+    output reg [IFM_DW-1:0]        ib_data1_out,
+    output reg [IFM_DW-1:0]        ib_data2_out,
 
     // Buffer Manager <-> pe_engine (FILTER)
     output wire                     fb_req_possible,
@@ -350,13 +350,16 @@ localparam ABV = 2'd0, // row - 1
 
 reg  [1:0] ptr_row0, ptr_row1, ptr_row2;
 
+
+wire row_ptr_switch = c_ctrl_data_run_d && c_is_last_chn_d && c_is_last_col_d;
+
 always @(posedge clk or negedge rstn) begin
     if (!rstn || csync_start) begin
         ptr_row0 <= CUR;
         ptr_row1 <= BEL;
         ptr_row2 <= ABV;
     end
-    else if (control_pipe[BM_DELAY-1][CTRL_DATA_RUN] && control_pipe[BM_DELAY-1][IS_LAST_CHN] && control_pipe[BM_DELAY-1][IS_LAST_COL]) begin
+    else if (row_ptr_switch) begin
         {ptr_row0, ptr_row1, ptr_row2} <= {ptr_row2, ptr_row0, ptr_row1};
     end
 end
@@ -466,7 +469,7 @@ end
 
 
 assign ifm_buf_read_addr  = pf_run ? pf_ifm_addr : reg_ifm_addr;
-assign ifm_buf_read_en    = pf_run | (c_ctrl_data_run & ~c_is_last_row);
+assign ifm_buf_read_en    = pf_run | (control_pipe[BM_DELAY-2][CTRL_DATA_RUN] & ~control_pipe[BM_DELAY-2][IS_LAST_ROW]);
 
 assign row_buf0_read_addr = reg_row_addr;
 assign row_buf1_read_addr = reg_row_addr;
@@ -493,9 +496,20 @@ wire [IFM_DW-1:0] cur_mux =
 wire [IFM_DW-1:0] bel_mux =
     c_is_last_row_d ? {IFM_DW{1'b0}} : ifm_buf_read_data;
 
-assign ib_data0_out = c_ctrl_data_run_d ? abv_mux : {IFM_DW{1'b0}};
-assign ib_data1_out = c_ctrl_data_run_d ? cur_mux : {IFM_DW{1'b0}};
-assign ib_data2_out = c_ctrl_data_run_d ? bel_mux : {IFM_DW{1'b0}};
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        ib_data0_out <= {IFM_DW{1'b0}};
+        ib_data1_out <= {IFM_DW{1'b0}};
+        ib_data2_out <= {IFM_DW{1'b0}};
+    end else begin
+        ib_data0_out <= c_ctrl_data_run_d ? abv_mux : {IFM_DW{1'b0}};
+        ib_data1_out <= c_ctrl_data_run_d ? cur_mux : {IFM_DW{1'b0}};
+        ib_data2_out <= c_ctrl_data_run_d ? bel_mux : {IFM_DW{1'b0}};
+    end
+end
+
+
 //----------------------------------------------------------------------------
 // 4) row buffer instance
 //----------------------------------------------------------------------------
