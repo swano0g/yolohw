@@ -5,16 +5,16 @@ from pathlib import Path
 # filt_path = Path("hw\\inout_data\\param_packed\\CONV04_param_packed_weight.hex")
 # ofm_path  = Path("hw\\inout_data\\expect\\CONV04_output_32b.hex")
 
-ifm_path  = Path("hw\\inout_data\\feamap\\test_input_32b.hex")
-filt_path = Path("hw\\inout_data\\param_packed\\test_param_packed_weight.hex")
-ofm_path  = Path("hw\\inout_data\\expect\\test_output_32b.hex")
+ifm_path  = Path("hw\\inout_data\\feamap\\test2_input_32b.hex")
+filt_path = Path("hw\\inout_data\\param_packed\\test2_param_packed_weight.hex")
+ofm_path  = Path("hw\\inout_data\\expect\\test2_output_32b.hex")
 
 ofm_path.parent.mkdir(parents=True, exist_ok=True)
 
-H   = 16     # input height
+H   = 3     # input height
 W   = 16     # input width
-C   = 16     # input channel
-M   = 32     # output channel
+C   = 8     # input channel
+M   = 8     # output channel
 K   = 3      # kernel
 pad = 1      # padding
 GROUPS_PER_PIXEL = C // 4
@@ -74,6 +74,10 @@ for m in range(M):
         b = word72.to_bytes(K*K, "little", signed=False) 
         w = np.frombuffer(b, dtype=np.int8).reshape(K, K)
         weights[m, c_idx] = w
+
+
+print(weights.shape, weights.dtype)              # (64, 64, 32) uint8
+print(weights)
 
 # -------------------------------
 # CONV cal

@@ -489,7 +489,7 @@ module bm_tb;
         r_pb_sync_done = 0;
 
         @(posedge ctrl_psync_run);     
-        repeat (100) @(posedge clk);
+        repeat (1000) @(posedge clk);
         @(posedge clk) r_pb_sync_done = 1'b1;
         @(posedge clk) r_pb_sync_done = 1'b0;
     end
@@ -516,7 +516,7 @@ module bm_tb;
         begin
             errors    = 0;
             checks    = 0;
-            max_print = 20;
+            max_print = 200;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
 
