@@ -105,7 +105,7 @@ module buffer_manager #(
 
 
 //============================================================================
-// 1) internal signals
+// internal signals
 //============================================================================
 reg  csync_d;
 reg  data_d;
@@ -162,8 +162,9 @@ wire c_is_last_chn_d   = control_pipe[BM_DELAY-1][IS_LAST_CHN];
 
 //============================================================================
 
+
 //============================================================================
-// 1) feature map buffer & AXI
+// I. FEATURE MAP BUFFER & AXI
 //============================================================================
 // ifm buf & ofm buf ping-pong
 
@@ -185,7 +186,7 @@ wire                 ifm_buf_read_en;
 
 
 
-// dpram_65536x32, 전체 fm 저장 퍼버
+// dpram_65536x32, entire fm buffer
 dpram_wrapper #(
     .DEPTH  (IFM_DEPTH        ),
     .AW     (IFM_AW           ),
@@ -205,7 +206,6 @@ u_fm_buf0(
 
 
 // spare buffer for ping pong
-// not implement it yet
 
 // dpram_wrapper #(
 //     .DEPTH  (IFM_DEPTH        ),
@@ -229,10 +229,10 @@ u_fm_buf0(
 
 
 //============================================================================
-// 2) filter buffer & AXI
+// II. FILTER BUFFER & AXI
 //============================================================================
 
-// dpram_512x72, filter 저장할 퍼버 & 4개
+// dpram_512x72
 
 // AXI mimic
 // wire                    dbg_axi_fb0_ena;
@@ -339,17 +339,16 @@ assign fb_req_possible = fb_req_possible_r;
 
 
 //========================================================================================================================================================
-// I. ROW BUFFER
+// III. ROW BUFFER
 //========================================================================================================================================================
 //----------------------------------------------------------------------------
-// I-1) row buf pointer
+// III-1) row buf pointer
 //----------------------------------------------------------------------------
 localparam ABV = 2'd0, // row - 1
            CUR = 2'd1, // row
            BEL = 2'd2; // row + 1
 
 reg  [1:0] ptr_row0, ptr_row1, ptr_row2;
-
 
 wire row_ptr_switch = c_ctrl_data_run_d && c_is_last_chn_d && c_is_last_col_d;
 
@@ -364,26 +363,17 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 //----------------------------------------------------------------------------
-// I-2) row buffer signals
-//----------------------------------------------------------------------------
-wire [ROW_AW-1:0] row_buf0_read_addr, row_buf1_read_addr, row_buf2_read_addr;
-wire [ROW_AW-1:0] row_buf0_write_addr, row_buf1_write_addr, row_buf2_write_addr;
-
-wire row0_wea, row1_wea, row2_wea;
-wire [IFM_DW-1:0] row0_dout, row1_dout, row2_dout; // row buf에서 읽어올 데이터
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-// I-3) row buffer prefill state machine (csync)
+// III-2) row buffer prefill state machine (csync)
 //----------------------------------------------------------------------------
 reg                 pf_run;     // prefill active
-reg                 pf_done;    // optional: 1 row done
-reg                 pf_vld;     // read-latency 보상(1사이클 후부터 유효)
-reg  [ROW_AW-1:0]   pf_cnt;     // 0 .. (q_width*q_channel - 1)
+reg                 pf_done;    // prefill done
+reg                 pf_vld;     // read-latency (activate after 1 cycle)
+reg  [ROW_AW-1:0]   pf_cnt;     // 0 .. (row_stride - 1)
 
 
-wire [ROW_AW-1:0] row_elems = q_row_stride[ROW_AW-1:0]; // 한 행의 요소 수
-wire [ROW_AW-1:0] pf_row_addr = pf_cnt;                 // rowbuf write addr
-wire [IFM_AW-1:0] pf_ifm_addr = {{(IFM_AW-ROW_AW){1'b0}}, pf_cnt}; // 첫 행 base=0
+wire [ROW_AW-1:0] row_elems = q_row_stride[ROW_AW-1:0]; 
+wire [ROW_AW-1:0] pf_row_addr = pf_cnt;                             // rowbuf write addr
+wire [IFM_AW-1:0] pf_ifm_addr = {{(IFM_AW-ROW_AW){1'b0}}, pf_cnt};  // ifmbuf read  addr
 reg  [ROW_AW-1:0] pf_row_addr_d;
 
 always @(posedge clk or negedge rstn) begin
@@ -396,35 +386,37 @@ always @(posedge clk or negedge rstn) begin
     end else begin
         pf_vld <= pf_run;
         pf_row_addr_d <= pf_row_addr;
-        // csync 상승 에지에서 프리필 시작
+        // prefill start 
         if (csync_start) begin
             pf_run  <= 1'b1;
             pf_done <= 1'b0;
-            // pf_vld  <= 1'b0;              // 첫 주소 제시 사이클
             pf_cnt  <= {ROW_AW{1'b0}};
         end else if (pf_run) begin
-            // pf_vld <= 1'b1;               // ifm_buf read 1사이클 레이턴시 가정
             pf_cnt <= pf_cnt + 1'b1;
             if (pf_cnt == row_elems - 1) begin
                 pf_run  <= 1'b0;
                 pf_done <= 1'b1;
-                // pf_vld  <= 1'b0;
             end
         end else if (!c_ctrl_csync_run) begin
-            // csync 종료 시점에 done 클리어(선택)
             pf_done <= 1'b0;
         end
     end
 end
 //----------------------------------------------------------------------------
-// I-4) row buffer signal
+// III-3) row buffer signal
 //----------------------------------------------------------------------------
+wire [ROW_AW-1:0] row_buf0_read_addr, row_buf1_read_addr, row_buf2_read_addr;
+wire [ROW_AW-1:0] row_buf0_write_addr, row_buf1_write_addr, row_buf2_write_addr;
+
+wire row0_wea, row1_wea, row2_wea;
+wire [IFM_DW-1:0] row0_dout, row1_dout, row2_dout; 
+
 // prefill only row buf 0
 assign row0_wea = pf_vld || (c_ctrl_data_run_d && (ptr_row0 == BEL));
 assign row1_wea = c_ctrl_data_run_d && (ptr_row1 == BEL);
 assign row2_wea = c_ctrl_data_run_d && (ptr_row2 == BEL);
 //----------------------------------------------------------------------------
-// I-5) ifm buf -> row buf addressing logic
+// III-4) ifm buf -> row buf addressing logic
 //----------------------------------------------------------------------------
 // ifm_buf_read_addr & row_buf_read_addr (wire)
 // [IFM_AW-1:0] ifm_buf_read_addr = c_row * (q_width * q_channel) + c_col * q_channel + c_chn (+ q_row_stride)
@@ -479,7 +471,7 @@ assign row_buf0_write_addr = pf_vld ? pf_row_addr_d : reg_row_addr_d;
 assign row_buf1_write_addr = reg_row_addr_d;
 assign row_buf2_write_addr = reg_row_addr_d;
 //----------------------------------------------------------------------------
-// 7) connect btw row buf & output registers ... comb
+// III-5) connect btw row buf & output registers ... comb
 //----------------------------------------------------------------------------
 // ABV
 wire [IFM_DW-1:0] abv_mux =
@@ -508,53 +500,51 @@ always @(posedge clk or negedge rstn) begin
         ib_data2_out <= c_ctrl_data_run_d ? bel_mux : {IFM_DW{1'b0}};
     end
 end
-
-
 //----------------------------------------------------------------------------
-// 4) row buffer instance
+// III-6) row buffer instance
 //----------------------------------------------------------------------------
 // dpram_1536x32 
 dpram_wrapper #(
-    .DEPTH  (ROW_DEPTH        ),
-    .AW     (ROW_AW           ),
-    .DW     (IFM_DW           ))
+    .DEPTH  (ROW_DEPTH                              ),
+    .AW     (ROW_AW                                 ),
+    .DW     (IFM_DW                                 ))
 u_row_buf0(    
-    .clk	(clk		      ),
-    .ena	(1'b1             ),
-	.addra	(row_buf0_write_addr),
-	.wea	(row0_wea         ),
-	.dia	(ifm_buf_read_data),
+    .clk	(clk		                            ),
+    .ena	(1'b1                                   ),
+	.addra	(row_buf0_write_addr                    ),
+	.wea	(row0_wea                               ),
+	.dia	(ifm_buf_read_data                      ),
     .enb    (control_pipe[BM_DELAY-2][CTRL_DATA_RUN]),     
-    .addrb	(row_buf0_read_addr),
-    .dob	(row0_dout        )
+    .addrb	(row_buf0_read_addr                     ),
+    .dob	(row0_dout                              )
 );
 dpram_wrapper #(
-    .DEPTH  (ROW_DEPTH        ),
-    .AW     (ROW_AW           ),
-    .DW     (IFM_DW           ))
+    .DEPTH  (ROW_DEPTH                              ),
+    .AW     (ROW_AW                                 ),
+    .DW     (IFM_DW                                 ))
 u_row_buf1(    
-    .clk	(clk		      ),
-    .ena	(1'b1             ),
-	.addra	(row_buf1_write_addr),
-	.wea	(row1_wea         ),
-	.dia	(ifm_buf_read_data),
+    .clk	(clk		                            ),
+    .ena	(1'b1                                   ),
+	.addra	(row_buf1_write_addr                    ),
+	.wea	(row1_wea                               ),
+	.dia	(ifm_buf_read_data                      ),
     .enb    (control_pipe[BM_DELAY-2][CTRL_DATA_RUN]),
-    .addrb	(row_buf1_read_addr),
-    .dob	(row1_dout        )
+    .addrb	(row_buf1_read_addr                     ),
+    .dob	(row1_dout                              )
 );
 dpram_wrapper #(
-    .DEPTH  (ROW_DEPTH        ),
-    .AW     (ROW_AW           ),
-    .DW     (IFM_DW           ))
+    .DEPTH  (ROW_DEPTH                              ),
+    .AW     (ROW_AW                                 ),
+    .DW     (IFM_DW                                 ))
 u_row_buf2(    
-    .clk	(clk		      ),
-    .ena	(1'b1             ),
-	.addra	(row_buf2_write_addr),
-	.wea	(row2_wea         ),
-	.dia	(ifm_buf_read_data),
+    .clk	(clk		                            ),
+    .ena	(1'b1                                   ),
+	.addra	(row_buf2_write_addr                    ),
+	.wea	(row2_wea                               ),
+	.dia	(ifm_buf_read_data                      ),
     .enb    (control_pipe[BM_DELAY-2][CTRL_DATA_RUN]),     
-    .addrb	(row_buf2_read_addr),
-    .dob	(row2_dout        ) 
+    .addrb	(row_buf2_read_addr                     ),
+    .dob	(row2_dout                              ) 
 );
 //----------------------------------------------------------------------------
 //========================================================================================================================================================
