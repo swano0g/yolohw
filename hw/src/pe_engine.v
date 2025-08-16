@@ -30,7 +30,9 @@ module pe_engine #(
     parameter PE_IFM_FLAT_BW        = `PE_IFM_FLAT_BW,
     parameter PE_FILTER_FLAT_BW     = `PE_FILTER_FLAT_BW,
     parameter PE_ACCO_FLAT_BW       = `PE_ACCO_FLAT_BW,
-    parameter PE_OUT_BW             = `W_PSUM
+    parameter PE_OUT_BW             = `W_PSUM,
+
+    parameter DBG_PSUM_FLAT         = `W_PSUM * 65536
 
 )(
 
@@ -77,10 +79,13 @@ module pe_engine #(
     output wire                     o_pb_req,
     output wire [BUF_AW-1:0]        o_pb_addr,
 
-    input  wire [W_PSUM-1:0]        pb_data_in
+    input  wire [W_PSUM-1:0]        pb_data_in,
 
     // control signal
     // output wire                     o_pe_done,   // maybe needed for psum logic
+
+    // debug
+    output wire [DBG_PSUM_FLAT-1:0] o_dbg_psumbuf_flat
 );
 
 localparam  IB_DELAY           = BM_DELAY;  // 2 calculate index -> buf -> pe
@@ -260,7 +265,7 @@ assign o_pe_csync_done = csync_done;
 
 // 4. psum (incomplete)
 // for debugging
-reg [31:0] psumbuf [192-1:0]; // 16*3*4=192     256*256*4(Tout)=262144      
+reg [W_PSUM-1:0] psumbuf [65536-1:0]; // dbg      
 
 
 
@@ -299,11 +304,19 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
+genvar gp;
+generate
+  for (gp = 0; gp < 65536; gp = gp + 1) begin : G_PSUM_PACK
+    assign o_dbg_psumbuf_flat[(gp+1)*W_PSUM-1 -: W_PSUM] = psumbuf[gp];
+  end
+endgenerate
+
+
 // 5. DUT: conv_pe
 conv_pe u_conv_pe(
     ./*input    */clk                (clk                                 ),
     ./*input    */rstn               (rstn                                ),
-    ./*input    */t_data_run         (data_vld_pipe[IB_DELAY-1]          ),
+    ./*input    */t_data_run         (data_vld_pipe[IB_DELAY-1]           ),
     ./*input    */t_cal_start        (data_vld_pipe[PE_PRE_CAL_DELAY-1]   ),
 
     ./*input    */c_is_first_row     (location_pipe[PE_PRE_CAL_DELAY-1][0]),
@@ -316,8 +329,8 @@ conv_pe u_conv_pe(
 
     // FILTER BUFFER 
     ./*input    */change_filter      (t_change_filter                     ),
-    ./*input    */load_filter        (filter_data_vld_pipe[FB_DELAY-1]   ),
-    ./*input    */load_idx           (filter_offset_pipe[FB_DELAY-1]     ),
+    ./*input    */load_filter        (filter_data_vld_pipe[FB_DELAY-1]    ),
+    ./*input    */load_idx           (filter_offset_pipe[FB_DELAY-1]      ),
     ./*input    */bm_filter_data_flat(fb_data_flat                        ),
 
     ./*output   */o_acc              (acc_flat                            ),
