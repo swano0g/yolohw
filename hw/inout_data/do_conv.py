@@ -93,8 +93,14 @@ print("result shape =", output.shape)  # (M,H,W)
 
 
 with ofm_path.open("w", encoding="utf-8") as fw:
-    for m in range(M):
-        for y in range(H_out):
-            for x in range(W_out):
+    # for m in range(M):
+    #     for y in range(H_out):
+    #         for x in range(W_out):
+    #             v = output[m, y, x] & 0xFFFFFFFF
+    #             fw.write(f"{v:08x}\n")
+
+    for y in range(H_out):
+        for x in range(W_out):
+            for m in range(M):
                 v = output[m, y, x] & 0xFFFFFFFF
                 fw.write(f"{v:08x}\n")
