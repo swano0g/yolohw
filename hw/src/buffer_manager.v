@@ -353,7 +353,7 @@ reg  [1:0] ptr_row0, ptr_row1, ptr_row2;
 wire row_ptr_switch = c_ctrl_data_run_d && c_is_last_chn_d && c_is_last_col_d;
 
 always @(posedge clk or negedge rstn) begin
-    if (!rstn || csync_start) begin
+    if (!rstn || data_start) begin
         ptr_row0 <= CUR;
         ptr_row1 <= BEL;
         ptr_row2 <= ABV;
@@ -377,7 +377,7 @@ wire [IFM_AW-1:0] pf_ifm_addr = {{(IFM_AW-ROW_AW){1'b0}}, pf_cnt};  // ifmbuf re
 reg  [ROW_AW-1:0] pf_row_addr_d;
 
 always @(posedge clk or negedge rstn) begin
-    if (!rstn) begin
+    if (!rstn || data_start) begin
         pf_run  <= 1'b0;
         pf_done <= 1'b0;
         pf_vld  <= 1'b0;
