@@ -104,6 +104,21 @@ localparam  STG                 = PE_PRE_CAL_DELAY + PE_CAL_DELAY; // 15
 
 wire t_change_filter;
 
+// 0. internal signal
+reg  csync_d;
+
+wire csync_start = c_ctrl_csync_run & ~csync_d;
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin 
+        csync_d <= 0;
+    end
+    else begin 
+        csync_d <= c_ctrl_csync_run;
+    end
+end
+
+
 
 // 1. pipe
 reg [W_SIZE-1:0]    row_pipe [0:STG-1];
@@ -177,7 +192,7 @@ reg fb_req;
 reg [FILTER_BUF_AW-1:0] fb_addr;
 
 always @(posedge clk or negedge rstn) begin 
-    if (!rstn) begin 
+    if (!rstn || csync_start) begin 
         //reset
         for (i = 0; i < FB_DELAY; i = i + 1) begin 
             filter_offset_pipe[i] <= 0;
@@ -198,7 +213,9 @@ always @(posedge clk or negedge rstn) begin
         // possible to load filter
         if (!filter_loaded && !fb_req && fb_req_possible) begin 
             fb_req <= 1;
-            filter_data_vld_pipe[0] <= 1;
+            // filter_data_vld_pipe[0] <= 1;
+            filter_data_vld_pipe[0] <= 0;
+            
             filter_offset_pipe[0] <= filter_offset;
         end
         else if (fb_req) begin 
@@ -207,8 +224,10 @@ always @(posedge clk or negedge rstn) begin
                 fb_req <= 0;
                 filter_loaded <= 1;
                 filter_offset <= 0;
-                filter_data_vld_pipe[0] <= 0;
-                filter_offset_pipe[0] <= 0;
+                // filter_data_vld_pipe[0] <= 0;
+                filter_data_vld_pipe[0] <= 1;
+                // filter_offset_pipe[0] <= 0;
+                filter_offset_pipe[0] <= filter_offset;
 
                 if (filter_idx == q_channel - 1) begin 
                     filter_idx <= 0;
