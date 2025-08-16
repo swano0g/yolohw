@@ -7,7 +7,7 @@ module buffer_manager #(
     parameter W_CHANNEL     = `W_CHANNEL,
 
     parameter BM_DELAY      = `BM_IB_DELAY - 1, // 2; output port reg -> only 2cycle delay inside BM
-    parameter IFM_DW        = `IFM_DW,  // 32
+    parameter IFM_DW        = `IFM_DW,      // 32
     parameter FILTER_DW     = `FILTER_DW,   // 72
 
 
@@ -363,7 +363,7 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 //----------------------------------------------------------------------------
-// III-2) row buffer prefill state machine (csync)
+// III-2) row buffer prefill state machine (csync) FIXME
 //----------------------------------------------------------------------------
 reg                 pf_run;     // prefill active
 reg                 pf_done;    // prefill done
