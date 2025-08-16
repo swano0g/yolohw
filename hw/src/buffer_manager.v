@@ -34,9 +34,9 @@ module buffer_manager #(
     input  wire                     q_load_ifm,         // ifm 로드 시작 시그널
     output wire                     o_load_ifm_done,    // ifm 로드 완료 시그널
 
-    input  wire [W_CHANNEL-1:0]     q_outchn,           // output channel 인덱스
-    input  wire                     q_load_filter,       // filter 로드 시작 시그널
-    output wire                     o_load_filter_done,    // ifm 로드 완료 시그널
+    input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
+    input  wire                     q_load_filter,          // filter 로드 시작 시그널
+    output wire                     o_load_filter_done,     // filter 로드 완료 시그널
 
     // Buffer Manager <-> AXI
     // AXI signals to load ifm, filter

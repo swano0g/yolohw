@@ -1,5 +1,6 @@
 `timescale 1ns/1ps
 `include "controller_params.vh"
+`include "sim_cfg.vh"
 
 module bm_tb;
     //----------------------------------------------------------------------  
@@ -26,30 +27,19 @@ module bm_tb;
     parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW;
     parameter BUF_AW           = `BUFFER_ADDRESS_BW;
 
-    parameter WIDTH         = 16;
-    parameter HEIGHT        = 3;
-    parameter CHANNEL       = 1;
-    parameter FRAME_SIZE    = WIDTH * HEIGHT * CHANNEL;
-
     localparam CLK_PERIOD   = 10; // 100 MHz
 
-    localparam BUF_DELAY   = 1;  // buf -> pe
 
 
-    // local parameters for test
-    localparam TEST_ROW         = 16;
-    localparam TEST_COL         = 16;
-    localparam TEST_CHNIN       = 16;    
-    localparam TEST_CHNOUT      = 32;
+    parameter TEST_ROW         = `TEST_ROW;
+    parameter TEST_COL         = `TEST_COL;
+    parameter TEST_CHNIN       = `TEST_CHNIN;    
+    parameter TEST_CHNOUT      = `TEST_CHNOUT;
 
-    localparam TEST_T_CHNIN     = TEST_CHNIN / Tin;
-    localparam TEST_T_CHNOUT    = TEST_CHNOUT / Tout;
-    localparam TEST_FRAME_SIZE  = TEST_ROW * TEST_COL * TEST_T_CHNIN;
+    parameter TEST_T_CHNIN     = `TEST_T_CHNIN;
+    parameter TEST_T_CHNOUT    = `TEST_T_CHNOUT;
+    parameter TEST_FRAME_SIZE  = `TEST_FRAME_SIZE;
     
-
-    `define TEST_IFM_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test_input_32b.hex"
-    `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test_param_packed_weight.hex"
-    `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test_output_32b.hex"
 
     //----------------------------------------------------------------------  
     // 2) 신호 선언
@@ -135,9 +125,6 @@ module bm_tb;
     wire                     layer_done;
     wire                     bm_csync_done;
     wire                     pe_csync_done;
-
-    // pe psum
-    wire [W_PSUM*65536-1:0]  dbg_psumbuf_flat;
 
     //----------------------------------------------------------------------  
     // 3) clock & reset
@@ -270,6 +257,7 @@ module bm_tb;
         .c_row(row),
         .c_col(col),
         .c_chn(chn),
+        .c_chn_out(chn_out),
         .c_is_first_row(is_first_row),
         .c_is_last_row (is_last_row),
         .c_is_first_col(is_first_col),
@@ -295,9 +283,7 @@ module bm_tb;
         .o_pb_req(pb_req),
         .o_pb_addr(pb_addr),
 
-        .pb_data_in(psum_data),
-
-        .o_dbg_psumbuf_flat(dbg_psumbuf_flat)
+        .pb_data_in(psum_data)
     );
     //----------------------------------------------------------------------  
     // 7) dram -> bram mimic
@@ -341,6 +327,8 @@ module bm_tb;
             @(posedge clk);
             dbg_axi_ib_ena <= 1'b0;
             dbg_axi_ib_wea <= 1'b0;
+            dbg_axi_ib_addra <= 0;
+            dbg_axi_ib_dia   <= 0;
         end
     endtask
 
@@ -361,8 +349,11 @@ module bm_tb;
             @(posedge clk);
             dbg_axi_fb0_ena <= 1'b0; 
             dbg_axi_fb0_wea <= 1'b0;
+            dbg_axi_fb0_addra <= 0;
+            dbg_axi_fb0_dia   <= 0;
         end
     endtask
+
     task automatic tb_axi_fb1 (
         input integer n_words,
         input integer base_addr
@@ -379,8 +370,11 @@ module bm_tb;
             @(posedge clk);
             dbg_axi_fb1_ena <= 1'b0; 
             dbg_axi_fb1_wea <= 1'b0;
+            dbg_axi_fb1_addra <= 0;
+            dbg_axi_fb1_dia   <= 0;
         end
     endtask
+    
     task automatic tb_axi_fb2 (
         input integer n_words,
         input integer base_addr
@@ -397,8 +391,11 @@ module bm_tb;
             @(posedge clk);
             dbg_axi_fb2_ena <= 1'b0; 
             dbg_axi_fb2_wea <= 1'b0;
+            dbg_axi_fb2_addra <= 0;
+            dbg_axi_fb2_dia   <= 0;
         end
     endtask
+
     task automatic tb_axi_fb3(
         input integer n_words,
         input integer base_addr
@@ -415,6 +412,8 @@ module bm_tb;
             @(posedge clk);
             dbg_axi_fb3_ena <= 1'b0; 
             dbg_axi_fb3_wea <= 1'b0;
+            dbg_axi_fb3_addra <= 0;
+            dbg_axi_fb3_dia   <= 0;
         end
     endtask
 
@@ -445,6 +444,9 @@ module bm_tb;
 
             dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
             tb_axi_fb3(words, dram_base3);
+
+            // wait csync deassert 
+            if (ctrl_csync_run === 1'b1) @(negedge ctrl_csync_run);
         end
     endtask
 
@@ -463,6 +465,8 @@ module bm_tb;
         q_layer        = 0;
         q_start        = 0; 
 
+        t = 0;
+
         #(4*CLK_PERIOD) rstn = 1'b1;
         #(CLK_PERIOD);
 
@@ -479,6 +483,18 @@ module bm_tb;
         end
     end
 
+    // psum buf (pb_sync_done signal)
+    reg r_pb_sync_done;
+    initial begin
+        r_pb_sync_done = 0;
+
+        @(posedge ctrl_psync_run);     
+        repeat (100) @(posedge clk);
+        @(posedge clk) r_pb_sync_done = 1'b1;
+        @(posedge clk) r_pb_sync_done = 1'b0;
+    end
+    assign pb_sync_done = r_pb_sync_done;
+
 
     //--------------------------------------------------------------------------
     // Initialize dram & compare output
@@ -489,14 +505,6 @@ module bm_tb;
         $readmemh(`TEST_EXP_PATH, expect);
     end
 
-    // unpack
-    reg [W_PSUM-1:0] dbg_psumbuf [0:65536-1];
-    integer i;
-    always @(*) begin
-        for (i = 0; i < 65536; i = i + 1) begin
-            dbg_psumbuf[i] = dbg_psumbuf_flat[i*W_PSUM +: W_PSUM];
-        end
-    end
 
     task automatic tb_check_psum_vs_expect;
         integer i;
@@ -513,7 +521,7 @@ module bm_tb;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
 
             for (i = 0; i < exp_words; i = i + 1) begin
-                got = dbg_psumbuf[i];    // 언팩된 psum 레지스터 뱅크
+                got = u_pe_engine.psumbuf[i]; 
                 exp = expect[i];         // 기대값 메모리
                 if (got !== exp) begin
                     errors = errors + 1;

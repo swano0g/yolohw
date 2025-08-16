@@ -1,5 +1,6 @@
 `timescale 1ns/1ps
 `include "controller_params.vh"
+`include "sim_cfg.vh"
 
 
 module pe_engine #(
@@ -32,8 +33,13 @@ module pe_engine #(
     parameter PE_ACCO_FLAT_BW       = `PE_ACCO_FLAT_BW,
     parameter PE_OUT_BW             = `W_PSUM,
 
-    parameter DBG_PSUM_FLAT         = `W_PSUM * 65536
-
+    // for debug test
+    parameter TEST_ROW    = `TEST_ROW,
+    parameter TEST_COL    = `TEST_COL,
+    parameter TEST_CHNIN  = `TEST_CHNIN,
+    parameter TEST_CHNOUT = `TEST_CHNOUT,
+    parameter TEST_T_CHNIN = `TEST_T_CHNIN,
+    parameter TEST_T_CHNOUT = `TEST_T_CHNOUT
 )(
 
     input  wire                     clk,
@@ -45,6 +51,7 @@ module pe_engine #(
     input  wire [W_SIZE-1:0]            c_row,
     input  wire [W_SIZE-1:0]            c_col,
     input  wire [W_CHANNEL-1:0]         c_chn,
+    input  wire [W_CHANNEL-1:0]         c_chn_out,
     // input  wire [W_FRAME_SIZE-1:0]      c_data_count,
     // input  wire                         c_end_frame,
 
@@ -79,13 +86,10 @@ module pe_engine #(
     output wire                     o_pb_req,
     output wire [BUF_AW-1:0]        o_pb_addr,
 
-    input  wire [W_PSUM-1:0]        pb_data_in,
+    input  wire [W_PSUM-1:0]        pb_data_in
 
     // control signal
     // output wire                     o_pe_done,   // maybe needed for psum logic
-
-    // debug
-    output wire [DBG_PSUM_FLAT-1:0] o_dbg_psumbuf_flat
 );
 
 localparam  IB_DELAY           = BM_DELAY;  // 2 calculate index -> buf -> pe
@@ -105,6 +109,7 @@ wire t_change_filter;
 reg [W_SIZE-1:0]    row_pipe [0:STG-1];
 reg [W_SIZE-1:0]    col_pipe [0:STG-1];
 reg [W_CHANNEL-1:0] chn_pipe [0:STG-1];
+reg [W_CHANNEL-1:0] chn_out_pipe [0:STG-1];
 
 // for calculation
 reg                 data_vld_pipe [0:STG-1];   // when data goes into pe
@@ -128,11 +133,13 @@ always @(posedge clk or negedge rstn) begin
             row_pipe[i] <= 0;
             col_pipe[i] <= 0;
             chn_pipe[i] <= 0;
+            chn_out_pipe[i] <= 0;
         end
     end else begin
         row_pipe[0] <= c_row;
         col_pipe[0] <= c_col;
         chn_pipe[0] <= c_chn;
+        chn_out_pipe[0] <= c_chn_out;
 
         data_vld_pipe[0] <= c_ctrl_data_run;
         location_pipe[0] <= {c_is_last_col, c_is_first_col, c_is_last_row, c_is_first_row};
@@ -147,6 +154,7 @@ always @(posedge clk or negedge rstn) begin
             row_pipe[i] <= row_pipe[i-1];
             col_pipe[i] <= col_pipe[i-1];
             chn_pipe[i] <= chn_pipe[i-1];
+            chn_out_pipe[i] <= chn_out_pipe[i-1];
         end
     end
 end
@@ -268,7 +276,6 @@ assign o_pe_csync_done = csync_done;
 reg [W_PSUM-1:0] psumbuf [65536-1:0]; // dbg      
 
 
-
 wire [PE_ACCO_FLAT_BW-1:0] acc_flat;
 wire                   vld;
 
@@ -289,12 +296,12 @@ reg [PSUM_IDX_W-1:0] idx0; // base address
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
         idx0 <= {PSUM_IDX_W{1'b0}};
-        for (i = 0; i < 192; i = i + 1) begin 
+        for (i = 0; i < 65536; i = i + 1) begin 
             psumbuf[i] <= 0;
         end
     end
     else if (vld) begin
-        idx0 = (row_pipe[STG-1]*16 + col_pipe[STG-1]) * Tout;
+        idx0 = (row_pipe[STG-1]* TEST_COL + col_pipe[STG-1]) * TEST_CHNOUT + chn_out_pipe[STG-1]* Tout;
 
         psumbuf[idx0 + 0] <= $signed(psumbuf[idx0 + 0]) + $signed(acc_arr[0]);
         psumbuf[idx0 + 1] <= $signed(psumbuf[idx0 + 1]) + $signed(acc_arr[1]);
@@ -302,14 +309,6 @@ always @(posedge clk or negedge rstn) begin
         psumbuf[idx0 + 3] <= $signed(psumbuf[idx0 + 3]) + $signed(acc_arr[3]);
     end
 end
-
-
-genvar gp;
-generate
-  for (gp = 0; gp < 65536; gp = gp + 1) begin : G_PSUM_PACK
-    assign o_dbg_psumbuf_flat[(gp+1)*W_PSUM-1 -: W_PSUM] = psumbuf[gp];
-  end
-endgenerate
 
 
 // 5. DUT: conv_pe
