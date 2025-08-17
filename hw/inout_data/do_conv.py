@@ -5,9 +5,9 @@ from pathlib import Path
 # filt_path = Path("hw\\inout_data\\param_packed\\CONV04_param_packed_weight.hex")
 # ofm_path  = Path("hw\\inout_data\\expect\\CONV04_output_32b.hex")
 
-ifm_path  = Path("hw\\inout_data\\feamap\\test_input_32b.hex")
-filt_path = Path("hw\\inout_data\\param_packed\\test_param_packed_weight.hex")
-ofm_path  = Path("hw\\inout_data\\expect\\test_output_32b.hex")
+ifm_path  = Path("hw\\inout_data\\feamap\\test_small_input_32b.hex")
+filt_path = Path("hw\\inout_data\\param_packed\\test_small_param_packed_weight.hex")
+ofm_path  = Path("hw\\inout_data\\expect\\test_small_output_32b.hex")
 
 ofm_path.parent.mkdir(parents=True, exist_ok=True)
 
