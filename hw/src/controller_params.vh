@@ -13,33 +13,18 @@
 `define Tout                4               // OUTPUT CHANNEL TILING
 `define W_Tin               2       
 
+
 `define IFM_DW              `W_DATA * `Tin                  // 32
 `define FILTER_DW           `W_KERNEL * `K * `K             // 72
 
-// ADDER TREE
+
+// ADDER TREE 4
 `define ADDER_TREE_DELAY    2
 
 // MAC
 `define MAC_DELAY           9               // 5(mul) + 4(adder tree)
 `define MAC_W_IN            128
 `define MAC_W_OUT           20
-
-
-// BUFFER
-`define BUFFER_ADDRESS_BW   14
-
-`define IFM_BUFFER_CNT          `K + 1               // # IFM BUFFER 
-`define IFM_BUFFER              2               // log2(IFM_BUFFER_CNT)
-`define IFM_BUFFER_WIDTH        `IFM_DW
-`define IFM_BUFFER_DEPTH        1536
-
-`define FILTER_BUFFER_CNT   `Tout
-`define FILTER_BUFFER       2               // log2(FILTER_BUFFER_CNT)
-`define FILTER_BUFFER_WIDTH `FILTER_DW
-`define FILTER_BUFFER_DEPTH 512
-
-`define PSUM_BUFFER_WI
-
 
 
 // CONTROLLER   
@@ -54,6 +39,34 @@
 `define PE_FILTER_FLAT_BW       `FILTER_DW * `Tout   
 `define PE_ACCO_FLAT_BW         `W_PSUM * `Tout
 `define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY  // 11
+
+
+
+// BUFFER
+`define BUFFER_ADDRESS_BW   14
+//
+
+`define BM_IB_DELAY            3   // index -> data -> reg
+`define BM_FB_DELAY            1
+
+
+`define FILTER_BUFFER_CNT       `Tout
+`define FILTER_BUFFER_DW        `FILTER_DW // 72
+`define FILTER_BUFFER_DEPTH     512
+`define FILTER_BUFFER_AW        $clog2(`FILTER_BUFFER_DEPTH)
+
+
+`define IFM_TOTAL_BUFFER_DW     `IFM_DW // 32
+`define IFM_TOTAL_BUFFER_DEPTH  65536  // 256KB / 4B
+`define IFM_TOTAL_BUFFER_AW     $clog2(`IFM_TOTAL_BUFFER_DEPTH)  // 256KB / 4B
+
+
+`define IFM_ROW_BUFFER_CNT      `K
+`define IFM_ROW_BUFFER_DW       `IFM_DW // 32
+`define IFM_ROW_BUFFER_DEPTH    1536    // 6KB  / 4
+`define IFM_ROW_BUFFER_AW       $clog2(`IFM_ROW_BUFFER_DEPTH)
+
+// add psum
 
 
 `endif

@@ -36,6 +36,7 @@ module pe_engine_tb;
     localparam TEST_CHNIN       = 8;    
     localparam TEST_T_CHNIN     = 2;
     localparam TEST_CHNOUT      = 4;    // fix
+    localparam TEST_T_CHNOUT    = 1;
     localparam TEST_FRAME_SIZE  = TEST_ROW * TEST_COL * TEST_T_CHNIN;
 
     localparam TEST_IB_DEPTH    = TEST_COL * TEST_T_CHNIN; // 32
@@ -81,95 +82,100 @@ module pe_engine_tb;
     //----------------------------------------------------------------------  
     // 4) cnn_ctrl 인스턴스
     //---------------------------------------------------------------------- 
-    wire                     ifm_buf_done;
-    wire                     filter_buf_done;
-
-    // pe
-    wire                     pe_done;
+    wire                     fb_load_done;
+    wire                     pb_sync_done;
     
     //
     reg  [W_SIZE-1:0]        q_width;
     reg  [W_SIZE-1:0]        q_height;
-    reg  [W_CHANNEL-1:0]     q_channel;    // 채널 수 입력
+    reg  [W_CHANNEL-1:0]     q_channel;
+    reg  [W_CHANNEL-1:0]     q_channel_out;
     reg  [W_FRAME_SIZE-1:0]  q_frame_size;
     reg                      q_start;
 
-    wire                     ctrl_vsync_run;
-    wire [W_DELAY-1:0]       ctrl_vsync_cnt;
-    wire                     ctrl_hsync_run;
-    wire [W_DELAY-1:0]       ctrl_hsync_cnt;
+    wire                     ctrl_csync_run;
+    wire                     ctrl_psync_run;
     wire                     ctrl_data_run;
     wire [W_SIZE-1:0]        row;
     wire [W_SIZE-1:0]        col;
-    wire [W_CHANNEL-1:0]     chn;        // 채널 인덱스 출력
-    wire [W_FRAME_SIZE-1:0]  data_count;
-    wire                     end_frame;
+    wire [W_CHANNEL-1:0]     chn;
+    wire [W_CHANNEL-1:0]     chn_out;
+    // wire [W_FRAME_SIZE-1:0]  data_count;
+    // wire                     end_frame;
 
-    wire                     ifm_buf_req_load;
-    wire [W_SIZE-1:0]        ifm_buf_req_row;
+    wire                     fb_load_req;
+    wire                     bm_csync_done;
     
     wire                     is_first_row;
     wire                     is_last_row;
     wire                     is_first_col;
     wire                     is_last_col; 
+    wire                     is_first_chn;
+    wire                     is_last_chn; 
+
+    wire                     layer_done;
+    wire                     pe_csync_done;
 
     cnn_ctrl u_cnn_ctrl (
         .clk               (clk               ),
         .rstn              (rstn              ),
         // Inputs
-        .q_ifm_buf_done    (ifm_buf_done      ),
-        .q_filter_buf_done (filter_buf_done   ),
         .q_width           (q_width           ),
         .q_height          (q_height          ),
         .q_channel         (q_channel         ),
+        .q_channel_out     (q_channel_out     ),
         .q_frame_size      (q_frame_size      ),
         .q_start           (q_start           ),
+        // .fb_load_done      (fb_load_done      ),
+        .pb_sync_done      (pb_sync_done      ),
+        .bm_csync_done     (bm_csync_done     ),
+        .pe_csync_done     (pe_csync_done     ),
         // Outputs
-        .o_ctrl_vsync_run  (ctrl_vsync_run    ),
-        .o_ctrl_vsync_cnt  (ctrl_vsync_cnt    ),
-        .o_ctrl_hsync_run  (ctrl_hsync_run    ),
-        .o_ctrl_hsync_cnt  (ctrl_hsync_cnt    ),
+        .o_ctrl_csync_run  (ctrl_csync_run    ),
+        .o_ctrl_psync_run  (ctrl_psync_run    ),
         .o_ctrl_data_run   (ctrl_data_run     ),
         .o_is_first_row    (is_first_row      ),
         .o_is_last_row     (is_last_row       ),
         .o_is_first_col    (is_first_col      ),
         .o_is_last_col     (is_last_col       ),
+        .o_is_first_chn    (is_first_chn      ),
+        .o_is_last_chn     (is_last_chn       ),
         .o_row             (row               ),
         .o_col             (col               ),
         .o_chn             (chn               ),
-        .o_data_count      (data_count        ),
-        .o_end_frame       (end_frame         ),
-
-        .o_ifm_buf_req_load(ifm_buf_req_load  ),
-        .o_ifm_buf_req_row (ifm_buf_req_row   ),
-        .q_pe_done         (pe_done           )
+        .o_chn_out         (chn_out           ),
+        .o_fb_load_req     (fb_load_req       ),
+        .o_layer_done      (layer_done        )
     );
 
   //----------------------------------------------------------------------  
   // 5) pe_engine 인스턴스
   //---------------------------------------------------------------------- 
+    wire                     fb_req_possible;
 
-  pe_engine u_pe_engine (
+    pe_engine u_pe_engine (
         .clk(clk), 
         .rstn(rstn),
         .c_ctrl_data_run(ctrl_data_run),
-        .c_ctrl_hsync_run(ctrl_hsync_run),
+        .c_ctrl_csync_run(ctrl_csync_run),
         .c_row(row),
         .c_col(col),
         .c_chn(chn),
-        .c_data_count(data_count),
-        .c_end_frame(end_frame),
+        // .c_data_count(data_count),
         .c_is_first_row(is_first_row),
         .c_is_last_row (is_last_row),
         .c_is_first_col(is_first_col),
         .c_is_last_col (is_last_col),
 
         .q_channel(q_channel),
+
+        .o_pe_csync_done(pe_csync_done),
         
         .ib_data0_in(ifm_data_0), 
         .ib_data1_in(ifm_data_1), 
         .ib_data2_in(ifm_data_2),
         
+        .fb_req_possible(fb_req_possible),
         .o_fb_req(fb_req),
         .o_fb_addr(fb_addr),
 
@@ -185,93 +191,49 @@ module pe_engine_tb;
     );
 
     //----------------------------------------------------------------------  
-    // 6) IFM buffer mimic
+    // 6) IFM buffer mimic (assume already loaded)
     //----------------------------------------------------------------------  
-    // load one ifm buffer: 16 cycle
-    reg         ifm0_loaded;
-    reg         ifm1_loaded;
-    reg         ifm2_loaded;
-
-    reg [7:0]   ifm_loading_cnt;
-    reg         ifm_loading;
-    reg [1:0]   ifm_loading_buf_num;
-
-    reg         ifm0_loaded_d;
-    reg         ifm1_loaded_d;
-    reg         ifm2_loaded_d;
-
+    // bm 2 cycle delay
     reg [BUF_AW-1:0] ifm_base_addr;
 
-    assign ifm_buf_done = (ifm0_loaded && !ifm0_loaded_d) || (ifm1_loaded && !ifm1_loaded_d) || (ifm2_loaded && !ifm2_loaded_d); 
-    
+    reg [IFM_DW-1:0] ifm_data_0_p, ifm_data_1_p, ifm_data_2_p;
+
     initial begin 
-        ifm0_loaded = 0;
-        ifm1_loaded = 0;
-        ifm2_loaded = 0;
-        ifm0_loaded_d = 0;
-        ifm1_loaded_d = 0;
-        ifm2_loaded_d = 0;
-
-        ifm_loading_cnt = 0;
-        ifm_loading = 0;
-        ifm_loading_buf_num = 0;
-
         ifm_base_addr = 0;
 
         ifm_data_0       = {IFM_DW{1'b0}};
         ifm_data_1       = {IFM_DW{1'b0}};
         ifm_data_2       = {IFM_DW{1'b0}};
+        ifm_data_0_p       = {IFM_DW{1'b0}};
+        ifm_data_1_p       = {IFM_DW{1'b0}};
+        ifm_data_2_p       = {IFM_DW{1'b0}};
     end
     
     always @(posedge clk or negedge rstn) begin 
-        if (ifm_buf_req_load && !ifm_loading) begin 
-            ifm_loading <= 1;
-            ifm_loading_buf_num <= ifm_buf_req_row;
-        end
-
-        if (ifm_loading) begin 
-            ifm_loading_cnt <= ifm_loading_cnt + 1;
-        end
-
-        if (ifm_loading_cnt == TEST_IB_LOAD_DELAY-1) begin
-            if (ifm_loading_buf_num == 0) begin 
-                ifm0_loaded <= 1;
-            end
-            else if (ifm_loading_buf_num == 1) begin 
-                ifm1_loaded <= 1;
-            end
-            else if (ifm_loading_buf_num == 2) begin 
-                ifm2_loaded <= 1;
-            end
-
-            ifm_loading <= 0;
-            ifm_loading_cnt <= 0;
-        end
-
-        ifm0_loaded_d <= ifm0_loaded;
-        ifm1_loaded_d <= ifm1_loaded;
-        ifm2_loaded_d <= ifm2_loaded;
-
-
         if (ctrl_data_run) begin 
             ifm_base_addr = col * TEST_T_CHNIN + chn;
-            if (row == 0 && ifm0_loaded && ifm1_loaded) begin 
-                ifm_data_0 <= 0;
-                ifm_data_1 <= ifmbuf0[ifm_base_addr];
-                ifm_data_2 <= ifmbuf1[ifm_base_addr];
+            if (row == 0) begin 
+                ifm_data_0_p <= 0;
+                ifm_data_1_p <= ifmbuf0[ifm_base_addr];
+                ifm_data_2_p <= ifmbuf1[ifm_base_addr];
             end
-            else if (row == 1 && ifm0_loaded && ifm1_loaded && ifm2_loaded) begin
-                ifm_data_0 <= ifmbuf0[ifm_base_addr];
-                ifm_data_1 <= ifmbuf1[ifm_base_addr];
-                ifm_data_2 <= ifmbuf2[ifm_base_addr];
+            else if (row == 1) begin
+                ifm_data_0_p <= ifmbuf0[ifm_base_addr];
+                ifm_data_1_p <= ifmbuf1[ifm_base_addr];
+                ifm_data_2_p <= ifmbuf2[ifm_base_addr];
             end
-            else if (row == 2 && ifm1_loaded && ifm2_loaded) begin 
-                ifm_data_0 <= ifmbuf1[ifm_base_addr];
-                ifm_data_1 <= ifmbuf2[ifm_base_addr];
-                ifm_data_2 <= 0;
+            else if (row == 2) begin 
+                ifm_data_0_p <= ifmbuf1[ifm_base_addr];
+                ifm_data_1_p <= ifmbuf2[ifm_base_addr];
+                ifm_data_2_p <= 0;
             end 
         end
+        ifm_data_0       <= ifm_data_0_p;
+        ifm_data_1       <= ifm_data_1_p;
+        ifm_data_2       <= ifm_data_2_p;
     end
+    
+    
     //----------------------------------------------------------------------  
     // 7) FILTER buffer mimic
     //---------------------------------------------------------------------- 
@@ -283,6 +245,10 @@ module pe_engine_tb;
 
     assign filter_buf_done = filter_loaded && !filter_loaded_d;
     
+    assign fb_req_possible = filter_loaded;
+
+    assign bm_csync_done =filter_loaded;
+
     initial begin 
         filter_loaded = 0;
         filter_loaded_d = 0;
@@ -294,7 +260,7 @@ module pe_engine_tb;
     end
 
     always @(posedge clk or negedge rstn) begin 
-        if (ctrl_vsync_run && !filter_loaded) begin 
+        if (ctrl_csync_run && !filter_loaded) begin 
             filter_loading_cnt <= filter_loading_cnt + 1;
         end
 
@@ -319,6 +285,7 @@ module pe_engine_tb;
         q_width        = TEST_COL;
         q_height       = TEST_ROW;   
         q_channel      = TEST_T_CHNIN;           // (tiled)채널 수 1. 즉 실제 input channel = 4
+        q_channel_out  = TEST_T_CHNOUT;
         q_frame_size   = TEST_FRAME_SIZE;
         q_start        = 0; 
 

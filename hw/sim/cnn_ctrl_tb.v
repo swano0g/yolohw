@@ -7,47 +7,46 @@ module cnn_ctrl_tb;
     parameter W_FRAME_SIZE  = `W_FRAME_SIZE;
     parameter W_DELAY       = `W_DELAY;
     
-    parameter IFM_BUF_CNT   = `IFM_BUFFER_CNT;       // 4
-    parameter W_IFM_BUF     = `IFM_BUFFER;         // 2
-    
-    parameter WIDTH         = 256;
-    parameter HEIGHT        = 256;
-    parameter CHANNEL       = 4;
+    parameter WIDTH         = 32;
+    parameter HEIGHT        = 32;
+    parameter CHANNEL       = 16;
+    parameter CHANNEL_O     = 32;
     parameter FRAME_SIZE    = WIDTH * HEIGHT * CHANNEL;
     
     reg                      clk, rstn;
     // buffer synchronization signals
-    reg                      q_ifm_buf_done;
-    reg                      q_filter_buf_done;
+    reg                      fb_load_done;
+    reg                      pb_sync_done;
 
-    // pe
-    reg                      q_pe_done;
     
     //
     reg  [W_SIZE-1:0]        q_width;
     reg  [W_SIZE-1:0]        q_height;
-    reg  [W_CHANNEL-1:0]     q_channel;    // 채널 수 입력
+    reg  [W_CHANNEL-1:0]     q_channel;
+    reg  [W_CHANNEL-1:0]     q_channel_out;
     reg  [W_FRAME_SIZE-1:0]  q_frame_size;
     reg                      q_start;
 
-    wire                     ctrl_vsync_run;
-    wire [W_DELAY-1:0]       ctrl_vsync_cnt;
-    wire                     ctrl_hsync_run;
-    wire [W_DELAY-1:0]       ctrl_hsync_cnt;
+    wire                     ctrl_csync_run;
+    wire                     ctrl_psync_run;
     wire                     ctrl_data_run;
     wire [W_SIZE-1:0]        row;
     wire [W_SIZE-1:0]        col;
-    wire [W_CHANNEL-1:0]     chn;        // 채널 인덱스 출력
-    wire [W_FRAME_SIZE-1:0]  data_count;
-    wire                     end_frame;
+    wire [W_CHANNEL-1:0]     chn;
+    wire [W_CHANNEL-1:0]     chn_out;
+    // wire [W_FRAME_SIZE-1:0]  data_count;
+    // wire                     end_frame;
 
-    wire                     ifm_buf_req_load;
-    wire [W_SIZE-1:0]        ifm_buf_req_row;
+    wire                     layer_done;
+
+    wire                     fb_load_req;
     
     wire                     is_first_row;
     wire                     is_last_row;
     wire                     is_first_col;
     wire                     is_last_col;
+    wire                     is_first_chn;
+    wire                     is_last_chn;
 
     //-------------------------------------------------
     // Controller (FSM)
@@ -56,32 +55,34 @@ module cnn_ctrl_tb;
         .clk               (clk               ),
         .rstn              (rstn              ),
         // Inputs
-        .q_ifm_buf_done    (q_ifm_buf_done    ),
-        .q_filter_buf_done (q_filter_buf_done ),
         .q_width           (q_width           ),
         .q_height          (q_height          ),
-        .q_channel         (q_channel         ),  // 추가
+        .q_channel         (q_channel         ),
+        .q_channel_out     (q_channel_out     ),
         .q_frame_size      (q_frame_size      ),
         .q_start           (q_start           ),
+
+        .fb_load_done      (fb_load_done      ),    // not used
+        .pb_sync_done      (pb_sync_done      ),
+
         // Outputs
-        .o_ctrl_vsync_run  (ctrl_vsync_run    ),
-        .o_ctrl_vsync_cnt  (ctrl_vsync_cnt    ),
-        .o_ctrl_hsync_run  (ctrl_hsync_run    ),
-        .o_ctrl_hsync_cnt  (ctrl_hsync_cnt    ),
+        .o_fb_load_req     (fb_load_req       ),
+        .o_ctrl_csync_run  (ctrl_csync_run    ),
+        .o_ctrl_psync_run  (ctrl_psync_run    ),
         .o_ctrl_data_run   (ctrl_data_run     ),
+
+        .o_layer_done      (layer_done        ),
+
         .o_is_first_row    (is_first_row      ),
         .o_is_last_row     (is_last_row       ),
         .o_is_first_col    (is_first_col      ),
         .o_is_last_col     (is_last_col       ),
+        .o_is_first_chn    (is_first_chn      ),
+        .o_is_last_chn     (is_last_chn       ),
         .o_row             (row               ),
         .o_col             (col               ),
-        .o_chn             (chn               ),  // 추가
-        .o_data_count      (data_count        ),
-        .o_end_frame       (end_frame         ),
-
-        .o_ifm_buf_req_load(ifm_buf_req_load  ),
-        .o_ifm_buf_req_row (ifm_buf_req_row   ),
-        .q_pe_done         (q_pe_done         )
+        .o_chn             (chn               ), 
+        .o_chn_out         (chn_out           )
     );
 
     // Clock
@@ -91,50 +92,76 @@ module cnn_ctrl_tb;
         forever #(CLK_PERIOD/2) clk = ~clk;
     end
    
-    // IFM buffer 
-    reg       loading;
-    reg [11:0] load_cnt;  // 2048 < 2^12
 
+    // TB: FILTER buffer load emulation (128-cycle delay -> 1-cycle done pulse) ----------------------------
+    localparam integer FB_DELAY = CHANNEL * 4;
 
-    always @(posedge clk or negedge rstn) begin 
-        q_pe_done <= 0;
-        if (row != 0 && ctrl_hsync_cnt == 5) begin 
-            q_pe_done <= 1;
-        end
-    end
+    reg        f_loading;
+    reg [6:0]  f_load_cnt;      // 0..127 (7 bits)
 
-    // Reset 및 동작
     always @(posedge clk or negedge rstn) begin
         if (!rstn) begin
-            loading        <= 1'b0;
-            load_cnt       <= 12'd0;
-            q_ifm_buf_done <= 1'b0;
-        end
+            f_loading     <= 1'b0;
+            f_load_cnt    <= 7'd0;
+            fb_load_done  <= 1'b0;
+        end else begin
+            fb_load_done  <= 1'b0;  // 기본값(펄스용)
 
-        if (ifm_buf_req_load && !loading) begin
-            // 새 로드 요청 감지 → 카운터 시작
-            loading        <= 1'b1;
-            load_cnt       <= 12'd0;
-            q_ifm_buf_done <= 1'b0;
-        end
-        else if (loading) begin
-            // 로딩중
-            load_cnt <= load_cnt + 1;
-
-            if (load_cnt == 12'd2047) begin
-                // 2048클럭 지연 후 1클럭 펄스 생성
-                q_ifm_buf_done <= 1'b1;
-                loading        <= 1'b0;
-            end else begin
-                q_ifm_buf_done <= 1'b0;
+            if (fb_load_req && !f_loading) begin
+                f_loading  <= 1'b1;
+                f_load_cnt <= 7'd0;
+            end
+            // 로딩 진행 중
+            else if (f_loading) begin
+                if (f_load_cnt == FB_DELAY-1) begin    // 127
+                    f_loading    <= 1'b0;
+                    fb_load_done <= 1'b1;              // 1사이클 펄스
+                end else begin
+                    f_load_cnt   <= f_load_cnt + 7'd1;
+                end
             end
         end
-        else begin
-            // idle 상태
-            q_ifm_buf_done <= 1'b0;
+    end
+    //------------------------------------------------------------------------------------------------------
+
+
+    localparam integer PS_DELAY = WIDTH / 2;
+
+    reg        ps_loading;
+    reg [5:0]  ps_cnt;          // 0..63
+    reg        psync_run_d;
+    reg        data_run_d;
+
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            ps_loading    <= 1'b0;
+            ps_cnt        <= 6'd0;
+            psync_run_d   <= 1'b0;
+            data_run_d    <= 1'b0;
+            pb_sync_done  <= 1'b0;
+        end else begin
+            // 이전 사이클 기록
+            psync_run_d  <= ctrl_psync_run;
+            data_run_d   <= ctrl_data_run;
+
+            pb_sync_done <= 1'b0;  // 기본값 (펄스용)
+
+            // 트리거: DATA_RUN -> PSYNC 전이
+            if (!ps_loading && (ctrl_psync_run && !psync_run_d) && data_run_d) begin
+                ps_loading <= 1'b1;
+                ps_cnt     <= 6'd0;
+            end
+            // 카운트 진행
+            else if (ps_loading) begin
+                if (ps_cnt == PS_DELAY-1) begin
+                    ps_loading   <= 1'b0;
+                    pb_sync_done <= 1'b1;  // 1사이클 펄스
+                end else begin
+                    ps_cnt <= ps_cnt + 6'd1;
+                end
+            end
         end
     end
-    //
 
 
 
@@ -147,37 +174,25 @@ module cnn_ctrl_tb;
         q_width        = WIDTH;
         q_height       = HEIGHT;   
         q_channel      = CHANNEL;           // (tiled)채널 수 4로 설정 (실제 타일 수는 16)
+        q_channel_out  = CHANNEL_O;
         q_frame_size   = FRAME_SIZE;
         q_start        = 1'b0; 
-        q_filter_buf_done   = 1'b0;
-        q_ifm_buf_done      = 1'b0;
+        pb_sync_done   = 1'b0;
         
         // FILTER
         // FILTER WIDTH=3, INPUT CHANNEL=16, TILED OUTPUT CHANNEL=4
         // # of data fetched from DRAM -> BRAM: 64(=INPUT CHANNEL*TILED OUTPUT CHANNEL) (128 cycle)
         
-        // IFM
-        // WIDTH=256, HEIGHT=256, INPUT CHANNEL=16, TILED INPUT CHANNEL=4
-        // # of data fetched from DRAM -> BRAM: 1024(=WIDTH*TILED INPUT CHANNEL) (2048 cycle)
-       
-
         #(4*CLK_PERIOD) rstn = 1'b1;
         
         #(100*CLK_PERIOD)
             @(posedge clk) q_start = 1'b1;
         #(4*CLK_PERIOD)
             @(posedge clk) q_start = 1'b0;
-        
-        // --------------------------------------- 
-        // loading filter buffer...
-        repeat(128) @(posedge clk);
-        @(posedge clk) q_filter_buf_done = 1;
-        @(posedge clk) q_filter_buf_done = 0;
-        // ---------------------------------------
     end
     
     initial begin
-        wait (end_frame == 1);
+        wait (layer_done == 1);
         repeat (1000) @(posedge clk);
         $finish;
     end
