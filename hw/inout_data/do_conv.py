@@ -5,16 +5,16 @@ from pathlib import Path
 # filt_path = Path("hw\\inout_data\\param_packed\\CONV04_param_packed_weight.hex")
 # ofm_path  = Path("hw\\inout_data\\expect\\CONV04_output_32b.hex")
 
-ifm_path  = Path("hw\\inout_data\\feamap\\test2_input_32b.hex")
-filt_path = Path("hw\\inout_data\\param_packed\\test2_param_packed_weight.hex")
-ofm_path  = Path("hw\\inout_data\\expect\\test2_output_32b.hex")
+ifm_path  = Path("hw\\inout_data\\feamap\\test_input_32b.hex")
+filt_path = Path("hw\\inout_data\\param_packed\\test_param_packed_weight.hex")
+ofm_path  = Path("hw\\inout_data\\expect\\test_output_32b.hex")
 
 ofm_path.parent.mkdir(parents=True, exist_ok=True)
 
-H   = 3     # input height
+H   = 16     # input height
 W   = 16     # input width
-C   = 8     # input channel
-M   = 8     # output channel
+C   = 16   # input channel
+M   = 32     # output channel
 K   = 3      # kernel
 pad = 1      # padding
 GROUPS_PER_PIXEL = C // 4
@@ -33,7 +33,7 @@ def read_hex32_file(path: Path) -> list[int]:
 
 ifm_words = read_hex32_file(ifm_path)
 
-ifm = np.zeros((H, W, C), dtype=np.uint8)
+ifm = np.zeros((H, W, C), dtype=np.int8)
 
 idx = 0
 for y in range(H):
@@ -42,7 +42,7 @@ for y in range(H):
             word = ifm_words[idx]; idx += 1
             b = word.to_bytes(4, "little", signed=False)
             ch_base = 4 * g
-            ifm[y, x, ch_base:ch_base+4] = np.frombuffer(b, dtype=np.uint8)
+            ifm[y, x, ch_base:ch_base+4] = np.frombuffer(b, dtype=np.int8)
 
 
 ifm_padded = np.pad(
@@ -76,8 +76,8 @@ for m in range(M):
         weights[m, c_idx] = w
 
 
-print(weights.shape, weights.dtype)              # (64, 64, 32) uint8
-print(weights)
+# print(weights.shape, weights.dtype)              # (64, 64, 32) uint8
+# print(weights)
 
 # -------------------------------
 # CONV cal
