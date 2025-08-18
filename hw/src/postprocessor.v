@@ -2,17 +2,17 @@
 `include "controller_params.vh"
 
 module postprocessor #(
-    parameter W_SIZE        = `W_SIZE,
-    parameter W_CHANNEL     = `W_CHANNEL,
-    parameter Tout          = `Tout,
+    parameter W_SIZE    = `W_SIZE,
+    parameter W_CHANNEL = `W_CHANNEL,
+    parameter Tout      = `Tout,
 
     parameter PSUM_DW   = `W_PSUM,   // psum bitwidth
     parameter BIAS_DW   = `BIAS_DW,   // bias bitwidth
     parameter SCALES_DW = `SCALES_DW,
-    parameter W_OUT    = `W_DATA,     // 8; final output bitwidth
+    parameter W_OUT     = `W_DATA,     // 8; final output bitwidth
 
-    parameter OFM_DW = `FM_BUFFER_DW,
-    parameter OFM_AW = `FM_BUFFER_AW,
+    parameter OFM_DW    = `FM_BUFFER_DW,
+    parameter OFM_AW    = `FM_BUFFER_AW,
     parameter OFM_DEPTH = `FM_BUFFER_DEPTH,
 
     parameter PE_ACCO_FLAT_BW = `PE_ACCO_FLAT_BW
@@ -20,7 +20,6 @@ module postprocessor #(
     input  wire                  clk,
     input  wire                  rstn,
 
-    
     // postprocessor <-> top
     input  wire [4:0]               q_layer,
     
@@ -49,25 +48,57 @@ module postprocessor #(
     output wire [OFM_AW-1:0]            o_pp_addr
 );
 
+//============================================================================
+// I. signals & pipe
+//============================================================================
+
+
+//============================================================================
+// II. BIAS, SCALE buffer
+//============================================================================
+
+
+//============================================================================
+// III. PSUM ROW buffer
+//============================================================================
+
+
+//============================================================================
+// IV. accumulating & column side max pool logic
+//============================================================================
+
+
+//============================================================================
+// V. row side max pooling
+//============================================================================
+
+
+//============================================================================
+// VI. output to buffer_manager 
+//============================================================================
+
+
+
+
+
 
 // for debugging
 localparam PSUM_DEPTH  = 65536; //
 localparam PSUM_AW     = $clog2(PSUM_DEPTH); //
 
-reg [PSUM_DW-1:0] psumbuf [PSUM_DEPTH-1:0]; // dbg 
-
+reg  [PSUM_DW-1:0] psumbuf [PSUM_DEPTH-1:0]; // dbg 
 wire [PSUM_DW-1:0] acc_arr [0:Tout-1];
 
+reg [PSUM_AW-1:0] base_addr;
+integer i;
 genvar g;
+
 generate
     for (g = 0; g < Tout; g = g + 1) begin : UNPACK_ACC
         assign acc_arr[g] = pe_data_i[(g+1)*PSUM_DW-1 -: PSUM_DW];
     end
 endgenerate
 
-reg [PSUM_AW-1:0] base_addr;
-
-integer i;
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
         base_addr <= {PSUM_AW{1'b0}};
@@ -84,6 +115,5 @@ always @(posedge clk or negedge rstn) begin
         psumbuf[base_addr + 3] <= $signed(psumbuf[base_addr + 3]) + $signed(acc_arr[3]);
     end
 end
-
-
+//
 endmodule
