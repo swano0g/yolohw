@@ -1,0 +1,7 @@
+tmp/
+local/
+
+.DS_Store
+
+.vscode/
+.idea/
