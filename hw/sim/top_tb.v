@@ -199,10 +199,6 @@ module top_tb;
         .o_load_filter_done (load_filter_done ),
 
         // Buffer Manager <-> AXI (IFM/FILTER) : TB가 구동
-        // .dbg_axi_ib_ena     (dbg_axi_ib_ena   ),
-        // .dbg_axi_ib_addra   (dbg_axi_ib_addra ),
-        // .dbg_axi_ib_wea     (dbg_axi_ib_wea   ),
-        // .dbg_axi_ib_dia     (dbg_axi_ib_dia   ),
         .read_data          (axi_read_data    ),
         .read_data_vld      (axi_read_data_vld),
         .first              (axi_first        ),
@@ -347,11 +343,6 @@ module top_tb;
     endfunction
 
     initial begin 
-        // IFM
-        // dbg_axi_ib_ena   = 1'b0;
-        // dbg_axi_ib_wea   = 1'b0;
-        // dbg_axi_ib_addra = 0;
-        // dbg_axi_ib_dia   = 0;
         axi_read_data     = 0;
         axi_read_data_vld = 0;
         axi_first         = 0;
@@ -523,7 +514,7 @@ module top_tb;
     endtask
 
     //----------------------------------------------------------------------  
-    // 7) stimulus
+    // 9) stimulus
     //---------------------------------------------------------------------- 
     integer t;
     initial begin
@@ -579,7 +570,7 @@ module top_tb;
 
 
     //--------------------------------------------------------------------------
-    // Initialize dram & compare output
+    // 10) Initialize dram & compare output
     //--------------------------------------------------------------------------
     initial begin 
         $readmemh(`TEST_IFM_PATH, ifm_dram);
