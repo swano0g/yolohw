@@ -557,7 +557,6 @@ module bm_tb;
     always @(posedge clk) begin
         if (layer_done && !checked_done) begin
             checked_done <= 1'b1;
-            // 마지막 쓰기 완료 여유를 위해 1~2클럭 대기
             @(posedge clk);
             @(posedge clk);
             tb_check_psum_vs_expect();

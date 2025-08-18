@@ -7,10 +7,10 @@ module postprocessor #(
     parameter PSUM_DW   = `W_PSUM,   // psum bitwidth
     parameter BIAS_DW   = `BIAS_DW,   // bias bitwidth
     parameter SCALES_DW = `SCALES_DW,
-    parameter W_OUT    = `W_DATA,     // final output bitwidth
+    parameter W_OUT    = `W_DATA,     // 8; final output bitwidth
 
-    parameter OFM_BUF_DW = ,
-    parameter OFM_BUF_AW = ,
+    parameter OFM_DW = `FM_BUFFER_DW,
+    parameter OFM_AW = `FM_BUFFER_AW,
 
     parameter PE_ACCO_FLAT_BW = `PE_ACCO_FLAT_BW
 )(
@@ -20,6 +20,7 @@ module postprocessor #(
     
     // postprocessor <-> top
     input  wire [4:0]               q_layer,
+
 
     // postprocessor <-> AXI
     // load bias, scales
@@ -33,8 +34,12 @@ module postprocessor #(
     input  wire [W_CHANNEL-1:0]         pe_chn_i,
     input  wire [W_CHANNEL-1:0]         pe_chn_out_i,
 
+
+
     // postprocessor <-> buffer_manager
-    output wire
+    output wire                         o_pp_data_vld,
+    output wire [OFM_DW-1:0]            o_pp_data,
+    output wire [OFM_AW-1:0]            o_pp_addr,
     
 );
 
