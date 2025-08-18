@@ -54,36 +54,15 @@ module top_tb;
 
     // DRAM
     // 256KB ifm
-    reg  [IFM_DW-1:0]           ifm_dram    [0:65536-1];
-    reg  [FILTER_DW-1:0]        filter_dram [0:65536-1];
+    reg  [AXI_WIDTH_DA-1:0]     ifm_dram    [0:65536-1];
+    reg  [AXI_WIDTH_DA-1:0]     filter_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect      [0:65536-1];
 
-    // IFM AXI
+
+    // IFM, FILTER AXI
     reg [AXI_WIDTH_DA-1:0]      axi_read_data;      // data from axi
     reg                         axi_read_data_vld;  // whether valid
     reg                         axi_first;          //
-
-
-    // FILTER AXI mimic (TB에서 구동)
-    reg                         dbg_axi_fb0_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb0_addra;
-    reg                         dbg_axi_fb0_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb0_dia;
-
-    reg                         dbg_axi_fb1_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb1_addra;
-    reg                         dbg_axi_fb1_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb1_dia;
-
-    reg                         dbg_axi_fb2_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb2_addra;
-    reg                         dbg_axi_fb2_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb2_dia;
-
-    reg                         dbg_axi_fb3_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb3_addra;
-    reg                         dbg_axi_fb3_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb3_dia;
 
 
     // BM <-> PE (IFM/FILTER) 연결선
@@ -203,26 +182,6 @@ module top_tb;
         .read_data_vld      (axi_read_data_vld),
         .first              (axi_first        ),
 
-        .dbg_axi_fb0_ena    (dbg_axi_fb0_ena  ),
-        .dbg_axi_fb0_addra  (dbg_axi_fb0_addra),
-        .dbg_axi_fb0_wea    (dbg_axi_fb0_wea  ),
-        .dbg_axi_fb0_dia    (dbg_axi_fb0_dia  ),
-
-        .dbg_axi_fb1_ena    (dbg_axi_fb1_ena  ),
-        .dbg_axi_fb1_addra  (dbg_axi_fb1_addra),
-        .dbg_axi_fb1_wea    (dbg_axi_fb1_wea  ),
-        .dbg_axi_fb1_dia    (dbg_axi_fb1_dia  ),
-
-        .dbg_axi_fb2_ena    (dbg_axi_fb2_ena  ),
-        .dbg_axi_fb2_addra  (dbg_axi_fb2_addra),
-        .dbg_axi_fb2_wea    (dbg_axi_fb2_wea  ),
-        .dbg_axi_fb2_dia    (dbg_axi_fb2_dia  ),
-
-        .dbg_axi_fb3_ena    (dbg_axi_fb3_ena  ),
-        .dbg_axi_fb3_addra  (dbg_axi_fb3_addra),
-        .dbg_axi_fb3_wea    (dbg_axi_fb3_wea  ),
-        .dbg_axi_fb3_dia    (dbg_axi_fb3_dia  ),
-        //
         // Buffer Manager <-> Controller 
         .c_ctrl_data_run    (ctrl_data_run    ),
         .c_ctrl_csync_run   (ctrl_csync_run   ),
@@ -330,7 +289,7 @@ module top_tb;
     );
     
     //----------------------------------------------------------------------  
-    // 8) dram -> bram mimic
+    // 8) AXI mimic
     //----------------------------------------------------------------------  
     function integer rand0_to_N;
         input integer N;
@@ -346,11 +305,6 @@ module top_tb;
         axi_read_data     = 0;
         axi_read_data_vld = 0;
         axi_first         = 0;
-        // FILTER
-        dbg_axi_fb0_ena   = 1'b0; dbg_axi_fb0_wea   = 1'b0; dbg_axi_fb0_addra = 0; dbg_axi_fb0_dia = 0;
-        dbg_axi_fb1_ena   = 1'b0; dbg_axi_fb1_wea   = 1'b0; dbg_axi_fb1_addra = 0; dbg_axi_fb1_dia = 0;
-        dbg_axi_fb2_ena   = 1'b0; dbg_axi_fb2_wea   = 1'b0; dbg_axi_fb2_addra = 0; dbg_axi_fb2_dia = 0;
-        dbg_axi_fb3_ena   = 1'b0; dbg_axi_fb3_wea   = 1'b0; dbg_axi_fb3_addra = 0; dbg_axi_fb3_dia = 0;
     end
 
     localparam AXI_MAX_GAP   = 7;
@@ -380,7 +334,6 @@ module top_tb;
                     axi_read_data_vld <= 1'b1;
                     @(posedge clk);
 
-                    // 단일 사이클 valid 펄스로 설계(필요 시 멀티사이클 유지로 바꾸세요)
                     axi_read_data_vld <= 1'b0;
 
                     i = i + 1;
@@ -395,118 +348,54 @@ module top_tb;
         end
     endtask
 
-    task automatic tb_axi_fb0 (
-        input integer n_words,
-        input integer base_addr
-        );
-
-        integer i;
-        begin
-            dbg_axi_fb0_ena <= 1'b1; 
-            dbg_axi_fb0_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb0_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb0_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb0_ena <= 1'b0; 
-            dbg_axi_fb0_wea <= 1'b0;
-            dbg_axi_fb0_addra <= 0;
-            dbg_axi_fb0_dia   <= 0;
-        end
-    endtask
-
-    task automatic tb_axi_fb1 (
-        input integer n_words,
-        input integer base_addr
-        );
-        integer i;
-        begin
-            dbg_axi_fb1_ena <= 1'b1; 
-            dbg_axi_fb1_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb1_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb1_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb1_ena <= 1'b0; 
-            dbg_axi_fb1_wea <= 1'b0;
-            dbg_axi_fb1_addra <= 0;
-            dbg_axi_fb1_dia   <= 0;
-        end
-    endtask
-    
-    task automatic tb_axi_fb2 (
-        input integer n_words,
-        input integer base_addr
-        );
-        integer i;
-        begin
-            dbg_axi_fb2_ena <= 1'b1; 
-            dbg_axi_fb2_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb2_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb2_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb2_ena <= 1'b0; 
-            dbg_axi_fb2_wea <= 1'b0;
-            dbg_axi_fb2_addra <= 0;
-            dbg_axi_fb2_dia   <= 0;
-        end
-    endtask
-
-    task automatic tb_axi_fb3(
-        input integer n_words,
-        input integer base_addr
-        );
-        integer i;
-        begin
-            dbg_axi_fb3_ena <= 1'b1; 
-            dbg_axi_fb3_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb3_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb3_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb3_ena <= 1'b0; 
-            dbg_axi_fb3_wea <= 1'b0;
-            dbg_axi_fb3_addra <= 0;
-            dbg_axi_fb3_dia   <= 0;
-        end
-    endtask
 
     task automatic tb_load_filters_in_csync (
         input integer tout_idx
         );
-        integer words, i;
+        integer words, i, j, remaining;
         integer dly; 
-        integer dram_base0, dram_base1, dram_base2, dram_base3;
+        integer base_addr;
+        
         begin
-            words = (q_channel << 2);
-            dram_base0 = (4 * tout_idx + 0) * words;
-            dram_base1 = (4 * tout_idx + 1) * words;
-            dram_base2 = (4 * tout_idx + 2) * words;
-            dram_base3 = (4 * tout_idx + 3) * words;
-
-
+            n_words = (q_channel << 2) * 9;
+            base_addr = tout_idx * words;
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+            
             @(posedge clk); wait (ctrl_csync_run == 1'b1);
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb0(words, dram_base0);
+            @(posedge clk);
+            q_load_filter = 1;
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb1(words, dram_base1);
+            remaining = n_words;
+            i = 0;
+            while (remaining > 0) begin
+                burst_len = rand0_to_N(AXI_MAX_BURST) + 1;
+                if (burst_len > remaining) burst_len = remaining;
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb2(words, dram_base2);
+                // burst 전 latency
+                dly = rand0_to_N(AXI_MAX_GAP);
+                repeat (dly) @(posedge clk);
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb3(words, dram_base3);
+                for (j = 0; j < burst_len; j = j + 1) begin
+                    axi_read_data     <= filter_dram[base_addr + i];
+                    axi_read_data_vld <= 1'b1;
+                    @(posedge clk);
+
+                    axi_read_data_vld <= 1'b0;
+
+                    i = i + 1;
+                    remaining = remaining - 1;
+                end
+            end
+
+            // drain
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+
+            @(posedge clk);
+            q_load_filter = 0;
+
 
             // wait csync deassert 
             if (ctrl_csync_run === 1'b1) @(negedge ctrl_csync_run);

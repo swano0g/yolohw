@@ -7,9 +7,9 @@ module buffer_manager #(
     parameter W_CHANNEL     = `W_CHANNEL,
 
     parameter BM_DELAY      = `BM_IB_DELAY - 1, // 2; output port reg -> only 2cycle delay inside BM
-    parameter IFM_DW        = `IFM_DW,      // 32
-    parameter OFM_DW        = `OFM_DW,      // 32
-    parameter FILTER_DW     = `FILTER_DW,   // 72
+    parameter IFM_DW        = `IFM_DW,          // 32
+    parameter OFM_DW        = `OFM_DW,          // 32
+    parameter FILTER_DW     = `FILTER_DW,       // 72
 
     parameter FILTER_DEPTH = `FILTER_BUFFER_DEPTH,
     parameter FILTER_AW    = `FILTER_BUFFER_AW,
@@ -30,7 +30,7 @@ module buffer_manager #(
     parameter ROW_DEPTH   = `IFM_ROW_BUFFER_DEPTH,
     parameter ROW_AW      = `IFM_ROW_BUFFER_AW,
 
-    //AXI
+    // AXI
     parameter AXI_WIDTH_DA = `AXI_WIDTH_DA
 )(
     input  wire               clk,
@@ -44,14 +44,14 @@ module buffer_manager #(
 
     input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용
 
-    input  wire                     q_load_ifm,         // ifm load start
-    // output wire                     o_load_ifm_done,    // ifm load done
+    input  wire                     q_load_ifm,             // ifm load start
+    // output wire                     o_load_ifm_done,     // ifm load done
 
     input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
     input  wire                     q_load_filter,          // filter 로드 시작 시그널
     output wire                     o_load_filter_done,     // filter 로드 완료 시그널
 
-    input  wire                     q_fm_buf_switch,            // ofm <-> ifm switch
+    input  wire                     q_fm_buf_switch,        // ofm <-> ifm switch
 
 
     // Buffer Manager <-> AXI
@@ -60,26 +60,26 @@ module buffer_manager #(
     input  wire                     first,          //
 
 
-    // AXI mimic for filter_buf0
-    input  wire                    dbg_axi_fb0_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb0_addra,
-    input  wire                    dbg_axi_fb0_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb0_dia,
-    // AXI mimic for filter_buf1
-    input  wire                    dbg_axi_fb1_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb1_addra,
-    input  wire                    dbg_axi_fb1_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb1_dia,
-    // AXI mimic for filter_buf2
-    input  wire                    dbg_axi_fb2_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb2_addra,
-    input  wire                    dbg_axi_fb2_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb2_dia,
-    // AXI mimic for filter_buf3
-    input  wire                    dbg_axi_fb3_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb3_addra,
-    input  wire                    dbg_axi_fb3_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb3_dia,
+    // // AXI mimic for filter_buf0
+    // input  wire                    dbg_axi_fb0_ena,
+    // input  wire [FILTER_AW-1:0]    dbg_axi_fb0_addra,
+    // input  wire                    dbg_axi_fb0_wea,
+    // input  wire [FILTER_DW-1:0]    dbg_axi_fb0_dia,
+    // // AXI mimic for filter_buf1
+    // input  wire                    dbg_axi_fb1_ena,
+    // input  wire [FILTER_AW-1:0]    dbg_axi_fb1_addra,
+    // input  wire                    dbg_axi_fb1_wea,
+    // input  wire [FILTER_DW-1:0]    dbg_axi_fb1_dia,
+    // // AXI mimic for filter_buf2
+    // input  wire                    dbg_axi_fb2_ena,
+    // input  wire [FILTER_AW-1:0]    dbg_axi_fb2_addra,
+    // input  wire                    dbg_axi_fb2_wea,
+    // input  wire [FILTER_DW-1:0]    dbg_axi_fb2_dia,
+    // // AXI mimic for filter_buf3
+    // input  wire                    dbg_axi_fb3_ena,
+    // input  wire [FILTER_AW-1:0]    dbg_axi_fb3_addra,
+    // input  wire                    dbg_axi_fb3_wea,
+    // input  wire [FILTER_DW-1:0]    dbg_axi_fb3_dia,
 
 
     //
@@ -320,88 +320,153 @@ u_fm_buf1(
 //============================================================================
 // II. FILTER BUFFER & AXI
 //============================================================================
+// function [15:0] cin_total_for_layer;
+//     input [3:0] idx;
+//     begin
+//         case (idx)
+//         4'd0:  cin_total_for_layer = 16'd3;    // conv0 : Cin=3
+//         4'd1:  cin_total_for_layer = 16'd16;   // conv2 : Cin=16
+//         4'd2:  cin_total_for_layer = 16'd32;   // conv4 : Cin=32
+//         4'd3:  cin_total_for_layer = 16'd64;   // conv6 : Cin=64
+//         4'd4:  cin_total_for_layer = 16'd128;  // conv8 : Cin=128
+//         4'd5:  cin_total_for_layer = 16'd256;  // conv10: Cin=256
+//         4'd6:  cin_total_for_layer = 16'd512;  // conv12: Cin=512
+//         4'd7:  cin_total_for_layer = 16'd256;  // conv13: Cin=256
+//         4'd8:  cin_total_for_layer = 16'd512;  // conv14: Cin=512
+//         4'd9:  cin_total_for_layer = 16'd128;  // conv17: Cin=128
+//         4'd10: cin_total_for_layer = 16'd384;  // conv20: Cin=384
+//         default: cin_total_for_layer = 16'd0;
+//         endcase
+//     end
+// endfunction
+
+// wire [15:0] CIN_TOTAL=cin_total_for_layer(q_layer);
+
+wire [W_CHANNEL-1:0] CIN_TOTAL = q_channel << 2;
+
+wire f_start  = q_load_filter & first;
+wire f_in_vld = q_load_filter & read_data_vld; //data valid signal
+
+reg [3:0] kpos;                // 0..8
+wire      kcommit = f_in_vld && (kpos == 4'd0) && (f_start!=1);
+
+reg [FILTER_DW-1:0] acc0, acc1, acc2, acc3; 
+reg [FILTER_AW-1:0] f_wr_addr;
+
+reg filter_group_done;
+
+reg                 f_we0, f_we1, f_we2, f_we3;
+reg [FILTER_DW-1:0] f_d0, f_d1, f_d2, f_d3;
+
+
+reg filter_group_done, filter_group_done_q;
+
+assign o_load_filter_done = filter_group_done & ~filter_group_done_q;
+
+
+always @(posedge clk or negedge rstn) begin
+    if(!rstn) begin
+        kpos <= 4'd0;
+        acc0 <= 72'd0; acc1 <= 72'd0; acc2 <= 72'd0; acc3 <= 72'd0;
+        f_wr_addr <= {FILTER_AW{1'b0}};
+        {f_we0,f_we1,f_we2,f_we3} <= 4'b0000;
+        filter_group_done   <= 1'b0;
+        filter_group_done_q <= 1'b0;
+    end else begin
+        // defaults
+        {f_we0,f_we1,f_we2,f_we3} <= 4'b0000;
+        filter_group_done_q <= filter_group_done;
+        filter_group_done   <= 1'b0;
+
+        if (f_start) begin //only at the initial burst
+            kpos      <= 4'd0;
+            f_wr_addr <= {FILTER_AW{1'b0}};
+            acc0 <= 72'd0; acc1 <= 72'd0; acc2 <= 72'd0; acc3 <= 72'd0;
+        end
+
+        if (f_in_vld) begin
+            acc0[8*kpos +: 8] <= read_data[ 7: 0];   // F0
+            acc1[8*kpos +: 8] <= read_data[15: 8];   // F1
+            acc2[8*kpos +: 8] <= read_data[23:16];   // F2
+            acc3[8*kpos +: 8] <= read_data[31:24];   // F3
+
+            kpos <= (kpos == 4'd8) ? 4'd0 : (kpos + 4'd1);
+        end
+
+        if (kcommit) begin
+            f_we0 <= 1'b1; f_d0 <= acc0;
+            f_we1 <= 1'b1; f_d1 <= acc1;
+            f_we2 <= 1'b1; f_d2 <= acc2;
+            f_we3 <= 1'b1; f_d3 <= acc3;
+
+            if (f_wr_addr == CIN_TOTAL[FILTER_AW-1:0] - 1) begin
+                filter_group_done <= 1'b1;
+                f_wr_addr <= {FILTER_AW{1'b0}};
+            end else begin
+                f_wr_addr <= f_wr_addr + 1'b1;
+            end
+        end
+    end
+end
+
+
 
 // dpram_512x72
-
-// AXI mimic
-// wire                    dbg_axi_fb0_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb0_addra;
-// wire                    dbg_axi_fb0_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb0_dia;
-
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf0(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb0_ena    ),
-    .addra  (dbg_axi_fb0_addra  ),
-    .wea    (dbg_axi_fb0_wea    ),
-    .dia    (dbg_axi_fb0_dia    ),
+    .ena    (1'b1           ),
+    .addra  (f_wr_addr      ),
+    .wea    (f_we0          ),
+    .dia    (f_d0           ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data0_out   )
 );
 
-// AXI mimic
-// wire                    dbg_axi_fb1_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb1_addra;
-// wire                    dbg_axi_fb1_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb1_dia;
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf1(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb1_ena    ),
-    .addra  (dbg_axi_fb1_addra  ),
-    .wea    (dbg_axi_fb1_wea    ),
-    .dia    (dbg_axi_fb1_dia    ),
+    .ena    (1'b1           ),
+    .addra  (f_wr_addr      ),
+    .wea    (f_we1          ),
+    .dia    (f_d1           ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data1_out   )
 );
 
-
-// AXI mimic
-// wire                    dbg_axi_fb2_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb2_addra;
-// wire                    dbg_axi_fb2_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb2_dia;
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf2(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb2_ena    ),
-    .addra  (dbg_axi_fb2_addra  ),
-    .wea    (dbg_axi_fb2_wea    ),
-    .dia    (dbg_axi_fb2_dia    ),
+    .ena    (1'b1           ),
+    .addra  (f_wr_addr      ),
+    .wea    (f_we2          ),
+    .dia    (f_d2           ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data2_out   )
 );
 
-
-
-// AXI mimic
-// wire                    dbg_axi_fb3_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb3_addra;
-// wire                    dbg_axi_fb3_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb3_dia;
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf3(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb3_ena    ),
-    .addra  (dbg_axi_fb3_addra  ),
-    .wea    (dbg_axi_fb3_wea    ),
-    .dia    (dbg_axi_fb3_dia    ),
+    .ena    (1'b1           ),
+    .addra  (f_wr_addr      ),
+    .wea    (f_we2          ),
+    .dia    (f_d2           ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data3_out   )
