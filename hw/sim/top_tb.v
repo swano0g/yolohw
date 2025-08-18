@@ -15,7 +15,7 @@ module top_tb;
     parameter Tout             = `Tout;
 
     parameter IFM_DW           = `IFM_DW;
-    parameter IFM_AW           = `IFM_TOTAL_BUFFER_AW;
+    parameter IFM_AW           = `FM_BUFFER_AW;
 
     parameter FILTER_DW        = `FILTER_DW;
     parameter FILTER_AW        = `FILTER_BUFFER_AW;
