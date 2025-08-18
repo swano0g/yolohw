@@ -35,9 +35,9 @@
             `define TEST_COL         16
             `define TEST_CHNIN       16    
             `define TEST_CHNOUT      32
-            `define TEST_IFM_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test_input_32b.hex"
-            `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test_param_packed_weight.hex"
-            `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test_output_32b.hex"
+            `define TEST_IFM_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test1_input_32b.hex"
+            `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
+            `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_output_32b.hex"
         `else
             // testcase 0
             // 5 us

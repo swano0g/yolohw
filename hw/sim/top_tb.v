@@ -352,13 +352,13 @@ module top_tb;
     task automatic tb_load_filters_in_csync (
         input integer tout_idx
         );
-        integer words, i, j, remaining;
+        integer n_words, i, j, remaining, burst_len;
         integer dly; 
         integer base_addr;
         
         begin
             n_words = (q_channel << 2) * 9;
-            base_addr = tout_idx * words;
+            base_addr = tout_idx * n_words;
             axi_read_data_vld <= 1'b0;
             axi_read_data     <= 0;
             
@@ -418,6 +418,7 @@ module top_tb;
         q_start        = 0; 
 
         q_load_ifm     = 0;
+        q_load_filter  = 0;
 
         t = 0;
 

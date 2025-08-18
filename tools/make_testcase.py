@@ -189,7 +189,7 @@ def pack_weight_for_hw(params: TCParams, out32_path: Path) -> None:
                     b = [src_lines[i] for i in idxs]
 
                     # little endian
-                    packed32 = f"{b[0]}{b[1]}{b[2]}{b[3]}"
+                    packed32 = f"{b[3]}{b[2]}{b[1]}{b[0]}"
                     fw.write(packed32.lower() + "\n")
 
 

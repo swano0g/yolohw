@@ -320,87 +320,85 @@ u_fm_buf1(
 //============================================================================
 // II. FILTER BUFFER & AXI
 //============================================================================
-// function [15:0] cin_total_for_layer;
-//     input [3:0] idx;
-//     begin
-//         case (idx)
-//         4'd0:  cin_total_for_layer = 16'd3;    // conv0 : Cin=3
-//         4'd1:  cin_total_for_layer = 16'd16;   // conv2 : Cin=16
-//         4'd2:  cin_total_for_layer = 16'd32;   // conv4 : Cin=32
-//         4'd3:  cin_total_for_layer = 16'd64;   // conv6 : Cin=64
-//         4'd4:  cin_total_for_layer = 16'd128;  // conv8 : Cin=128
-//         4'd5:  cin_total_for_layer = 16'd256;  // conv10: Cin=256
-//         4'd6:  cin_total_for_layer = 16'd512;  // conv12: Cin=512
-//         4'd7:  cin_total_for_layer = 16'd256;  // conv13: Cin=256
-//         4'd8:  cin_total_for_layer = 16'd512;  // conv14: Cin=512
-//         4'd9:  cin_total_for_layer = 16'd128;  // conv17: Cin=128
-//         4'd10: cin_total_for_layer = 16'd384;  // conv20: Cin=384
-//         default: cin_total_for_layer = 16'd0;
-//         endcase
-//     end
-// endfunction
+reg armed, q_load_filter_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        armed <= 1'b0; q_load_filter_d <= 1'b0;
+    end else begin      
+        q_load_filter_d <= q_load_filter;
+        if (q_load_filter & ~q_load_filter_d) armed <= 1'b1;
+        if (armed && read_data_vld)           armed <= 1'b0;
+    end
+end
 
-// wire [15:0] CIN_TOTAL=cin_total_for_layer(q_layer);
+wire f_start  = armed & read_data_vld;
+wire f_in_vld = q_load_filter & read_data_vld; 
 
-wire [W_CHANNEL-1:0] CIN_TOTAL = q_channel << 2;
 
-wire f_start  = q_load_filter & first;
-wire f_in_vld = q_load_filter & read_data_vld; //data valid signal
+wire [FILTER_AW-1:0] fb_last_addr = (q_channel << 2) -1'b1;
 
-reg [3:0] kpos;                // 0..8
-wire      kcommit = f_in_vld && (kpos == 4'd0) && (f_start!=1);
 
 reg [FILTER_DW-1:0] acc0, acc1, acc2, acc3; 
-reg [FILTER_AW-1:0] f_wr_addr;
+reg [FILTER_AW-1:0] f_wr_addr; 
 
-reg filter_group_done;
+reg  [3:0] kpos;
+wire [3:0] kpos_use = f_start ? 4'd0 : kpos; 
+wire [3:0] kpos_nxt = f_start ? 4'd1
+                              : (f_in_vld ? ((kpos==4'd8) ? 4'd0 : (kpos+4'd1)) : kpos);
 
-reg                 f_we0, f_we1, f_we2, f_we3;
-reg [FILTER_DW-1:0] f_d0, f_d1, f_d2, f_d3;
+wire      kcommit = f_in_vld && (kpos == 4'd8);
+reg       kcommit_d;
 
 
-reg filter_group_done, filter_group_done_q;
+// fb_req_possible
+// catch last write address
+wire filter_last_write = kcommit_d & (f_wr_addr == fb_last_addr);
 
-assign o_load_filter_done = filter_group_done & ~filter_group_done_q;
+reg fb_req_possible_r, fb_req_possible_r_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn || csync_start) begin
+        fb_req_possible_r <= 1'b0;
+        fb_req_possible_r_d <= 1'b0;
+    end else begin 
+        if (filter_last_write) fb_req_possible_r <= 1'b1;
+        fb_req_possible_r_d <= fb_req_possible_r;
+    end
+end
+
+assign fb_req_possible = fb_req_possible_r;
+assign o_load_filter_done = fb_req_possible_r & ~fb_req_possible_r_d;
 
 
 always @(posedge clk or negedge rstn) begin
     if(!rstn) begin
         kpos <= 4'd0;
-        acc0 <= 72'd0; acc1 <= 72'd0; acc2 <= 72'd0; acc3 <= 72'd0;
-        f_wr_addr <= {FILTER_AW{1'b0}};
-        {f_we0,f_we1,f_we2,f_we3} <= 4'b0000;
-        filter_group_done   <= 1'b0;
-        filter_group_done_q <= 1'b0;
-    end else begin
-        // defaults
-        {f_we0,f_we1,f_we2,f_we3} <= 4'b0000;
-        filter_group_done_q <= filter_group_done;
-        filter_group_done   <= 1'b0;
 
-        if (f_start) begin //only at the initial burst
+        acc0 <= {FILTER_DW{1'b0}}; 
+        acc1 <= {FILTER_DW{1'b0}}; 
+        acc2 <= {FILTER_DW{1'b0}}; 
+        acc3 <= {FILTER_DW{1'b0}};
+
+        f_wr_addr <= {FILTER_AW{1'b0}};
+
+        kcommit_d <= 1'b0;
+    end else begin
+        if (f_start) begin
             kpos      <= 4'd0;
-            f_wr_addr <= {FILTER_AW{1'b0}};
-            acc0 <= 72'd0; acc1 <= 72'd0; acc2 <= 72'd0; acc3 <= 72'd0;
+            f_wr_addr <= 0;
+            acc0 <= 0; acc1 <= 0; acc2 <= 0; acc3 <= 0;
         end
 
         if (f_in_vld) begin
-            acc0[8*kpos +: 8] <= read_data[ 7: 0];   // F0
-            acc1[8*kpos +: 8] <= read_data[15: 8];   // F1
-            acc2[8*kpos +: 8] <= read_data[23:16];   // F2
-            acc3[8*kpos +: 8] <= read_data[31:24];   // F3
-
-            kpos <= (kpos == 4'd8) ? 4'd0 : (kpos + 4'd1);
+            acc0[8*kpos_use +: 8] <= read_data[ 7: 0];   // F0
+            acc1[8*kpos_use +: 8] <= read_data[15: 8];   // F1
+            acc2[8*kpos_use +: 8] <= read_data[23:16];   // F2
+            acc3[8*kpos_use +: 8] <= read_data[31:24];   // F3
         end
+        kpos <= kpos_nxt;
 
-        if (kcommit) begin
-            f_we0 <= 1'b1; f_d0 <= acc0;
-            f_we1 <= 1'b1; f_d1 <= acc1;
-            f_we2 <= 1'b1; f_d2 <= acc2;
-            f_we3 <= 1'b1; f_d3 <= acc3;
-
-            if (f_wr_addr == CIN_TOTAL[FILTER_AW-1:0] - 1) begin
-                filter_group_done <= 1'b1;
+        kcommit_d <= kcommit;
+        if (kcommit_d) begin
+            if (f_wr_addr == fb_last_addr) begin
                 f_wr_addr <= {FILTER_AW{1'b0}};
             end else begin
                 f_wr_addr <= f_wr_addr + 1'b1;
@@ -409,6 +407,17 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 
+wire                    fb_ena;
+wire                    fb_wea;
+wire [FILTER_DW-1:0]    fb0_wdata, fb1_wdata, fb2_wdata, fb3_wdata;
+
+
+assign fb_ena = q_load_filter;
+assign fb_wea = kcommit_d;
+assign fb0_wdata = acc0;
+assign fb1_wdata = acc1;
+assign fb2_wdata = acc2;
+assign fb3_wdata = acc3;
 
 
 // dpram_512x72
@@ -418,10 +427,10 @@ dpram_wrapper #(
     .DW     (FILTER_DW      ))
 u_filter_buf0(    
     .clk	(clk		    ),
-    .ena    (1'b1           ),
+    .ena    (fb_ena         ),
     .addra  (f_wr_addr      ),
-    .wea    (f_we0          ),
-    .dia    (f_d0           ),
+    .wea    (fb_wea         ),
+    .dia    (fb0_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data0_out   )
@@ -433,10 +442,10 @@ dpram_wrapper #(
     .DW     (FILTER_DW      ))
 u_filter_buf1(    
     .clk	(clk		    ),
-    .ena    (1'b1           ),
+    .ena    (fb_ena         ),
     .addra  (f_wr_addr      ),
-    .wea    (f_we1          ),
-    .dia    (f_d1           ),
+    .wea    (fb_wea         ),
+    .dia    (fb1_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data1_out   )
@@ -448,10 +457,10 @@ dpram_wrapper #(
     .DW     (FILTER_DW      ))
 u_filter_buf2(    
     .clk	(clk		    ),
-    .ena    (1'b1           ),
+    .ena    (fb_ena         ),
     .addra  (f_wr_addr      ),
-    .wea    (f_we2          ),
-    .dia    (f_d2           ),
+    .wea    (fb_wea         ),
+    .dia    (fb2_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data2_out   )
@@ -463,29 +472,15 @@ dpram_wrapper #(
     .DW     (FILTER_DW      ))
 u_filter_buf3(    
     .clk	(clk		    ),
-    .ena    (1'b1           ),
+    .ena    (fb_ena         ),
     .addra  (f_wr_addr      ),
-    .wea    (f_we2          ),
-    .dia    (f_d2           ),
+    .wea    (fb_wea         ),
+    .dia    (fb3_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data3_out   )
 );
 
-
-// fb_req_possible
-// catch last write address
-wire [FILTER_AW-1:0] fb_last_addr = ( {{(FILTER_AW-W_CHANNEL){1'b0}}, q_channel} << 2 ) - 1'b1;
-wire filter_last_write = dbg_axi_fb3_ena & dbg_axi_fb3_wea & (dbg_axi_fb3_addra == fb_last_addr);
-
-
-reg fb_req_possible_r;
-always @(posedge clk or negedge rstn) begin
-    if (!rstn || csync_start) fb_req_possible_r <= 1'b0;
-    else if (filter_last_write) fb_req_possible_r <= 1'b1;
-end
-
-assign fb_req_possible = fb_req_possible_r;
 //============================================================================
 
 
