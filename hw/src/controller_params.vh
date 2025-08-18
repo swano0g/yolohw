@@ -44,8 +44,6 @@
 
 
 // BUFFER
-`define BUFFER_ADDRESS_BW   14
-//
 
 `define BM_IB_DELAY            3   // index -> data -> reg
 `define BM_FB_DELAY            1
@@ -71,8 +69,8 @@
 // FEATURE MAP BUFFER
 `define FM_BUFFER_CNT           2   // IFM, OFM
 `define FM_BUFFER_DW            `IFM_DW // 32
-`define FM_BUFFER_DEPTH         65536  // 256KB / 4B
-`define FM_BUFFER_AW            $clog2(`IFM_TOTAL_BUFFER_DEPTH)  // 256KB / 4B
+`define FM_BUFFER_DEPTH         65536                           // 256KB / 4B
+`define FM_BUFFER_AW            $clog2(`FM_BUFFER_DEPTH) // 256KB / 4B
 
 
 // postprocessor
