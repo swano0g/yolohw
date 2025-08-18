@@ -25,7 +25,6 @@ module bm_tb;
     parameter PE_IFM_FLAT_BW    = `PE_IFM_FLAT_BW;
     parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW;
     parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW;
-    parameter BUF_AW           = `BUFFER_ADDRESS_BW;
 
     localparam CLK_PERIOD   = 10; // 100 MHz
 
@@ -557,6 +556,7 @@ module bm_tb;
     always @(posedge clk) begin
         if (layer_done && !checked_done) begin
             checked_done <= 1'b1;
+            // 마지막 쓰기 완료 여유를 위해 1~2클럭 대기
             @(posedge clk);
             @(posedge clk);
             tb_check_psum_vs_expect();

@@ -18,7 +18,8 @@ module pe_engine_tb;
     parameter PE_IFM_FLAT_BW    = `PE_IFM_FLAT_BW;
     parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW;
     parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW;
-    parameter BUF_AW           = `BUFFER_ADDRESS_BW;
+
+    parameter FB_AW         = `FILTER_BUFFER_AW;
 
     parameter WIDTH         = 16;
     parameter HEIGHT        = 3;
@@ -59,7 +60,7 @@ module pe_engine_tb;
 
 
     wire                 fb_req;
-    wire [BUF_AW-1:09]   fb_addr;
+    wire [FB_AW-1:0]     fb_addr;
 
     reg  [FILTER_DW-1:0] filter_data_0;
     reg  [FILTER_DW-1:0] filter_data_1;
@@ -68,7 +69,7 @@ module pe_engine_tb;
 
 
     wire pb_req;
-    wire [BUF_AW-1:0] pb_addr;
+    wire [FM_BUF_AW-1:0] pb_addr;
     wire [W_PSUM-1:0] psum_data;
 
     //----------------------------------------------------------------------  
