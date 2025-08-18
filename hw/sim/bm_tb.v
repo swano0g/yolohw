@@ -571,4 +571,3 @@ module bm_tb;
     end
 
 endmodule
-

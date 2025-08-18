@@ -6,9 +6,6 @@
 module pe_engine #(
     parameter W_SIZE        = `W_SIZE,
     parameter W_CHANNEL     = `W_CHANNEL,
-    parameter W_FRAME_SIZE  = `W_FRAME_SIZE,
-    parameter W_DELAY       = `W_DELAY,
-
     
     parameter K             = `K,
     parameter Tin           = `Tin,
@@ -52,8 +49,6 @@ module pe_engine #(
     input  wire [W_SIZE-1:0]            c_col,
     input  wire [W_CHANNEL-1:0]         c_chn,
     input  wire [W_CHANNEL-1:0]         c_chn_out,
-    // input  wire [W_FRAME_SIZE-1:0]      c_data_count,
-    // input  wire                         c_end_frame,
 
     input  wire                         c_is_first_row,
     input  wire                         c_is_last_row,
@@ -272,22 +267,22 @@ assign t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_P
 
 
 // pe csync done signal
-reg csync_done;
+// reg csync_done;
 
-always @(posedge clk or negedge rstn) begin 
-    if (!rstn) begin 
-        csync_done <= 0;
-    end else begin 
-        if (filter_loaded && c_ctrl_csync_run) begin 
-            csync_done <= 1;
-        end else begin 
-            csync_done <= 0;
-        end
-    end   
-end
+// always @(posedge clk or negedge rstn) begin 
+//     if (!rstn) begin 
+//         csync_done <= 0;
+//     end else begin 
+//         if (filter_loaded && c_ctrl_csync_run) begin 
+//             csync_done <= 1;
+//         end else begin 
+//             csync_done <= 0;
+//         end
+//     end   
+// end
 
-assign o_pe_csync_done = csync_done;
-
+// assign o_pe_csync_done = csync_done;
+assign o_pe_csync_done = filter_loaded & c_ctrl_csync_run;
 
 
 // 4. psum (incomplete)

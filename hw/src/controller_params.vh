@@ -16,6 +16,7 @@
 
 `define IFM_DW              `W_DATA * `Tin                  // 32
 `define FILTER_DW           `W_KERNEL * `K * `K             // 72
+`define PSUM_DW             `W_PSUM 
 
 
 // ADDER TREE 4
@@ -66,7 +67,17 @@
 `define IFM_ROW_BUFFER_DEPTH    1536    // 6KB  / 4
 `define IFM_ROW_BUFFER_AW       $clog2(`IFM_ROW_BUFFER_DEPTH)
 
-// add psum
+
+// FEATURE MAP BUFFER
+`define FM_BUFFER_CNT           2   // IFM, OFM
+`define FM_BUFFER_DW            `IFM_DW // 32
+`define FM_BUFFER_DEPTH         65536  // 256KB / 4B
+`define FM_BUFFER_AW            $clog2(`IFM_TOTAL_BUFFER_DEPTH)  // 256KB / 4B
+
+
+// postprocessor
+`define BIAS_DW                 32
+`define SCALES_DW               32
 
 
 `endif

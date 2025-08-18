@@ -31,8 +31,8 @@ module buffer_manager #(
 
     input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용
 
-    input  wire                     q_load_ifm,         // ifm 로드 시작 시그널
-    output wire                     o_load_ifm_done,    // ifm 로드 완료 시그널
+    input  wire                     q_load_ifm,         // ifm load start
+    output wire                     o_load_ifm_done,    // ifm load done
 
     input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
     input  wire                     q_load_filter,          // filter 로드 시작 시그널
