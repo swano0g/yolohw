@@ -57,29 +57,7 @@ module buffer_manager #(
     // Buffer Manager <-> AXI
     input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
     input  wire                     read_data_vld,  // whether valid
-    input  wire                     first,          //
-
-
-    // // AXI mimic for filter_buf0
-    // input  wire                    dbg_axi_fb0_ena,
-    // input  wire [FILTER_AW-1:0]    dbg_axi_fb0_addra,
-    // input  wire                    dbg_axi_fb0_wea,
-    // input  wire [FILTER_DW-1:0]    dbg_axi_fb0_dia,
-    // // AXI mimic for filter_buf1
-    // input  wire                    dbg_axi_fb1_ena,
-    // input  wire [FILTER_AW-1:0]    dbg_axi_fb1_addra,
-    // input  wire                    dbg_axi_fb1_wea,
-    // input  wire [FILTER_DW-1:0]    dbg_axi_fb1_dia,
-    // // AXI mimic for filter_buf2
-    // input  wire                    dbg_axi_fb2_ena,
-    // input  wire [FILTER_AW-1:0]    dbg_axi_fb2_addra,
-    // input  wire                    dbg_axi_fb2_wea,
-    // input  wire [FILTER_DW-1:0]    dbg_axi_fb2_dia,
-    // // AXI mimic for filter_buf3
-    // input  wire                    dbg_axi_fb3_ena,
-    // input  wire [FILTER_AW-1:0]    dbg_axi_fb3_addra,
-    // input  wire                    dbg_axi_fb3_wea,
-    // input  wire [FILTER_DW-1:0]    dbg_axi_fb3_dia,
+    // input  wire                     first,          // not use
 
 
     //
@@ -348,27 +326,7 @@ wire [3:0] kpos_nxt = f_start ? 4'd1
 
 wire      kcommit = f_in_vld && (kpos == 4'd8);
 reg       kcommit_d;
-
-
-// fb_req_possible
-// catch last write address
-wire filter_last_write = kcommit_d & (f_wr_addr == fb_last_addr);
-
-reg fb_req_possible_r, fb_req_possible_r_d;
-always @(posedge clk or negedge rstn) begin
-    if (!rstn || csync_start) begin
-        fb_req_possible_r <= 1'b0;
-        fb_req_possible_r_d <= 1'b0;
-    end else begin 
-        if (filter_last_write) fb_req_possible_r <= 1'b1;
-        fb_req_possible_r_d <= fb_req_possible_r;
-    end
-end
-
-assign fb_req_possible = fb_req_possible_r;
-assign o_load_filter_done = fb_req_possible_r & ~fb_req_possible_r_d;
-
-
+//----------------------------------------------------------------------------
 always @(posedge clk or negedge rstn) begin
     if(!rstn) begin
         kpos <= 4'd0;
@@ -406,11 +364,28 @@ always @(posedge clk or negedge rstn) begin
         end
     end
 end
+//----------------------------------------------------------------------------
+// fb_req_possible
+// catch last write address
+wire filter_last_write = kcommit_d & (f_wr_addr == fb_last_addr);
 
+reg fb_req_possible_r, fb_req_possible_r_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn || csync_start) begin
+        fb_req_possible_r <= 1'b0;
+        fb_req_possible_r_d <= 1'b0;
+    end else begin 
+        if (filter_last_write) fb_req_possible_r <= 1'b1;
+        fb_req_possible_r_d <= fb_req_possible_r;
+    end
+end
+
+assign fb_req_possible = fb_req_possible_r;
+assign o_load_filter_done = fb_req_possible_r & ~fb_req_possible_r_d;
+//----------------------------------------------------------------------------
 wire                    fb_ena;
 wire                    fb_wea;
 wire [FILTER_DW-1:0]    fb0_wdata, fb1_wdata, fb2_wdata, fb3_wdata;
-
 
 assign fb_ena = q_load_filter;
 assign fb_wea = kcommit_d;
@@ -418,8 +393,7 @@ assign fb0_wdata = acc0;
 assign fb1_wdata = acc1;
 assign fb2_wdata = acc2;
 assign fb3_wdata = acc3;
-
-
+//----------------------------------------------------------------------------
 // dpram_512x72
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
@@ -480,7 +454,6 @@ u_filter_buf3(
     .addrb	(fb_addr        ),
     .dob	(fb_data3_out   )
 );
-
 //============================================================================
 
 
