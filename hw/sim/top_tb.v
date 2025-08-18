@@ -26,6 +26,8 @@ module top_tb;
     parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW;
     parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW;
 
+    parameter AXI_WIDTH_DA      = `AXI_WIDTH_DA;
+
     localparam CLK_PERIOD   = 10; // 100 MHz
 
 
@@ -46,7 +48,6 @@ module top_tb;
     reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
     reg  [4:0]                  q_layer;
     reg                         q_load_ifm;
-    wire                        load_ifm_done;
     reg  [W_CHANNEL-1:0]        q_outchn;
     reg                         q_load_filter;
     wire                        load_filter_done;
@@ -57,11 +58,11 @@ module top_tb;
     reg  [FILTER_DW-1:0]        filter_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect      [0:65536-1];
 
-    // IFM AXI mimic (TB에서 구동)
-    reg                         dbg_axi_ib_ena;
-    reg  [IFM_AW-1:0]           dbg_axi_ib_addra;
-    reg                         dbg_axi_ib_wea;
-    reg  [IFM_DW-1:0]           dbg_axi_ib_dia;
+    // IFM AXI
+    reg [AXI_WIDTH_DA-1:0]      axi_read_data;      // data from axi
+    reg                         axi_read_data_vld;  // whether valid
+    reg                         axi_first;          //
+
 
     // FILTER AXI mimic (TB에서 구동)
     reg                         dbg_axi_fb0_ena;
@@ -191,17 +192,20 @@ module top_tb;
         .q_layer            (q_layer          ),
 
         .q_load_ifm         (q_load_ifm       ),
-        .o_load_ifm_done    (load_ifm_done    ),
+        // .o_load_ifm_done    (load_ifm_done    ),
 
         .q_outchn           (q_outchn         ),
         .q_load_filter      (q_load_filter    ),
         .o_load_filter_done (load_filter_done ),
 
         // Buffer Manager <-> AXI (IFM/FILTER) : TB가 구동
-        .dbg_axi_ib_ena     (dbg_axi_ib_ena   ),
-        .dbg_axi_ib_addra   (dbg_axi_ib_addra ),
-        .dbg_axi_ib_wea     (dbg_axi_ib_wea   ),
-        .dbg_axi_ib_dia     (dbg_axi_ib_dia   ),
+        // .dbg_axi_ib_ena     (dbg_axi_ib_ena   ),
+        // .dbg_axi_ib_addra   (dbg_axi_ib_addra ),
+        // .dbg_axi_ib_wea     (dbg_axi_ib_wea   ),
+        // .dbg_axi_ib_dia     (dbg_axi_ib_dia   ),
+        .read_data          (axi_read_data    ),
+        .read_data_vld      (axi_read_data_vld),
+        .first              (axi_first        ),
 
         .dbg_axi_fb0_ena    (dbg_axi_fb0_ena  ),
         .dbg_axi_fb0_addra  (dbg_axi_fb0_addra),
@@ -344,10 +348,13 @@ module top_tb;
 
     initial begin 
         // IFM
-        dbg_axi_ib_ena   = 1'b0;
-        dbg_axi_ib_wea   = 1'b0;
-        dbg_axi_ib_addra = 0;
-        dbg_axi_ib_dia   = 0;
+        // dbg_axi_ib_ena   = 1'b0;
+        // dbg_axi_ib_wea   = 1'b0;
+        // dbg_axi_ib_addra = 0;
+        // dbg_axi_ib_dia   = 0;
+        axi_read_data     = 0;
+        axi_read_data_vld = 0;
+        axi_first         = 0;
         // FILTER
         dbg_axi_fb0_ena   = 1'b0; dbg_axi_fb0_wea   = 1'b0; dbg_axi_fb0_addra = 0; dbg_axi_fb0_dia = 0;
         dbg_axi_fb1_ena   = 1'b0; dbg_axi_fb1_wea   = 1'b0; dbg_axi_fb1_addra = 0; dbg_axi_fb1_dia = 0;
@@ -355,24 +362,45 @@ module top_tb;
         dbg_axi_fb3_ena   = 1'b0; dbg_axi_fb3_wea   = 1'b0; dbg_axi_fb3_addra = 0; dbg_axi_fb3_dia = 0;
     end
 
+    localparam AXI_MAX_GAP   = 7;
+    localparam AXI_MAX_BURST = 15;
+
     task automatic tb_axi_ifm_from_dram (
         input integer      n_words      // 쓸 워드 수 (q_width*q_height*q_channel)
         );
-        integer i;
+        integer i, j, dly, burst_len, remaining;
         begin
-            // 1클럭당 1워드 쓰기
-            dbg_axi_ib_ena <= 1'b1;
-            dbg_axi_ib_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_ib_addra <= i[IFM_AW-1:0];
-                dbg_axi_ib_dia   <= ifm_dram[i];
-            end
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
             @(posedge clk);
-            dbg_axi_ib_ena <= 1'b0;
-            dbg_axi_ib_wea <= 1'b0;
-            dbg_axi_ib_addra <= 0;
-            dbg_axi_ib_dia   <= 0;
+
+            remaining = n_words;
+            i = 0;
+            while (remaining > 0) begin
+                burst_len = rand0_to_N(AXI_MAX_BURST) + 1;
+                if (burst_len > remaining) burst_len = remaining;
+
+                // burst 전 latency
+                dly = rand0_to_N(AXI_MAX_GAP);
+                repeat (dly) @(posedge clk);
+
+                for (j = 0; j < burst_len; j = j + 1) begin
+                    axi_read_data     <= ifm_dram[i];
+                    axi_read_data_vld <= 1'b1;
+                    @(posedge clk);
+
+                    // 단일 사이클 valid 펄스로 설계(필요 시 멀티사이클 유지로 바꾸세요)
+                    axi_read_data_vld <= 1'b0;
+
+                    i = i + 1;
+                    remaining = remaining - 1;
+                end
+            end
+
+            // drain
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+            @(posedge clk);
         end
     endtask
 
@@ -509,12 +537,22 @@ module top_tb;
         q_layer        = 0;
         q_start        = 0; 
 
+        q_load_ifm     = 0;
+
         t = 0;
 
         #(4*CLK_PERIOD) rstn = 1'b1;
         #(CLK_PERIOD);
 
+        // AXI load ifm
+        q_load_ifm = 1;
+        
         tb_axi_ifm_from_dram(q_width*q_height*q_channel);
+        
+        #(CLK_PERIOD);
+        q_load_ifm = 0;
+        //
+
 
         #(100*CLK_PERIOD)
             @(posedge clk) q_start = 1'b1;

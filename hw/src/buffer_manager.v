@@ -28,7 +28,10 @@ module buffer_manager #(
 
 
     parameter ROW_DEPTH   = `IFM_ROW_BUFFER_DEPTH,
-    parameter ROW_AW      = `IFM_ROW_BUFFER_AW
+    parameter ROW_AW      = `IFM_ROW_BUFFER_AW,
+
+    //AXI
+    parameter AXI_WIDTH_DA = `AXI_WIDTH_DA
 )(
     input  wire               clk,
     input  wire               rstn,
@@ -42,7 +45,7 @@ module buffer_manager #(
     input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용
 
     input  wire                     q_load_ifm,         // ifm load start
-    output wire                     o_load_ifm_done,    // ifm load done
+    // output wire                     o_load_ifm_done,    // ifm load done
 
     input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
     input  wire                     q_load_filter,          // filter 로드 시작 시그널
@@ -50,13 +53,13 @@ module buffer_manager #(
 
     input  wire                     q_fm_buf_switch,            // ofm <-> ifm switch
 
+
     // Buffer Manager <-> AXI
-    // AXI signals to load ifm, filter
-    // AXI mimic for ifm_buf
-    input  wire                     dbg_axi_ib_ena,
-    input  wire [IFM_AW-1:0]        dbg_axi_ib_addra,
-    input  wire                     dbg_axi_ib_wea,
-    input  wire [IFM_DW-1:0]        dbg_axi_ib_dia,
+    input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
+    input  wire                     read_data_vld,  // whether valid
+    input  wire                     first,          //
+
+
     // AXI mimic for filter_buf0
     input  wire                    dbg_axi_fb0_ena,
     input  wire [FILTER_AW-1:0]    dbg_axi_fb0_addra,
@@ -117,7 +120,7 @@ module buffer_manager #(
 
 
 //============================================================================
-// internal signals
+//  . internal signals
 //============================================================================
 reg  csync_d;
 reg  data_d;
@@ -171,7 +174,6 @@ wire c_is_first_col_d  = control_pipe[BM_DELAY-1][IS_FIRST_COL];
 wire c_is_last_col_d   = control_pipe[BM_DELAY-1][IS_LAST_COL];
 wire c_is_first_chn_d  = control_pipe[BM_DELAY-1][IS_FIRST_CHN];
 wire c_is_last_chn_d   = control_pipe[BM_DELAY-1][IS_LAST_CHN];
-
 //============================================================================
 
 
@@ -194,7 +196,7 @@ always @(posedge clk or negedge rstn) begin
         end
     end
 end
-
+//----------------------------------------------------------------------------
 
 wire [FM_AW-1:0]     fm_buf0_write_addr;
 wire                 fm_buf0_wea;
@@ -211,9 +213,7 @@ wire                 fm_buf1_read_en;
 wire [FM_AW-1:0]     fm_buf1_read_addr;
 wire [FM_DW-1:0]     fm_buf1_read_data;
 
-
-//--------------------------------------------------------------------------------------
-
+//----------------------------------------------------------------------------
 wire [IFM_AW-1:0]    ifm_buf_read_addr;
 wire [IFM_DW-1:0]    ifm_buf_read_data;
 wire                 ifm_buf_read_en;
@@ -221,17 +221,49 @@ wire                 ifm_buf_read_en;
 wire [OFM_AW-1:0]    ofm_buf_write_addr;
 wire [OFM_DW-1:0]    ofm_buf_write_data;
 wire                 ofm_buf_wea;
+//----------------------------------------------------------------------------
+// AXI APPEND
+reg q_load_ifm_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) q_load_ifm_d <= 1'b0;
+    else       q_load_ifm_d <= q_load_ifm;
+end
+wire load_start = q_load_ifm & ~q_load_ifm_d;
 
-//--------------------------------------------------------------------------------------
-assign fm_buf0_wea        = (dbg_axi_ib_ena)   ? dbg_axi_ib_wea     
+reg                 axi_ifm_ena;
+reg                 axi_ifm_wr_en;
+reg [IFM_AW-1:0]    axi_ifm_wr_addr;
+reg [IFM_DW-1:0]    axi_ifm_wr_data;
+
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        axi_ifm_ena     <= 0;
+        axi_ifm_wr_en   <= 0;
+        axi_ifm_wr_addr <= 0;
+        axi_ifm_wr_data <= 0;
+    end else begin
+        axi_ifm_ena     <= q_load_ifm;
+        axi_ifm_wr_en   <= q_load_ifm & read_data_vld;
+        axi_ifm_wr_data <= read_data;
+
+        if (load_start) begin
+            axi_ifm_wr_addr <= 0;
+        end else if (axi_ifm_wr_en) begin
+            axi_ifm_wr_addr <= axi_ifm_wr_addr + 1'b1;
+        end
+    end
+end
+//----------------------------------------------------------------------------
+assign fm_buf0_wea        = (axi_ifm_ena)      ? axi_ifm_wr_en     
                           : (fm_buf0_ptr==OFM) ? ofm_buf_wea        
                           : 1'b0;
 
-assign fm_buf0_write_addr = (dbg_axi_ib_ena)   ? dbg_axi_ib_addra     
+assign fm_buf0_write_addr = (axi_ifm_ena)      ? axi_ifm_wr_addr     
                           : (fm_buf0_ptr==OFM) ? ofm_buf_write_addr 
                           : {FM_AW{1'b0}};
 
-assign fm_buf0_write_data = (dbg_axi_ib_ena)   ? dbg_axi_ib_dia
+assign fm_buf0_write_data = (axi_ifm_ena)      ? axi_ifm_wr_data
                           : (fm_buf0_ptr==OFM) ? ofm_buf_write_data 
                           : {FM_DW{1'b0}};
 
@@ -247,18 +279,8 @@ assign fm_buf1_read_addr  = (fm_buf1_ptr==IFM) ? ifm_buf_read_addr  : {FM_AW{1'b
 assign ifm_buf_read_data  = (fm_buf0_ptr==IFM) ? fm_buf0_read_data :
                             (fm_buf1_ptr==IFM) ? fm_buf1_read_data :
                             {IFM_DW{1'b0}};
-
-//--------------------------------------------------------------------------------------
-
-// AXI mimic
-// wire                dbg_axi_ib_ena;
-// wire [IFM_AW-1:0]   dbg_axi_ib_addra;
-// wire                dbg_axi_ib_wea;
-// wire [IFM_DW-1:0]   dbg_axi_ib_dia;
-
-
-
-// dpram_65536x32, entire fm buffer
+//----------------------------------------------------------------------------
+// dpram_65536x32
 dpram_wrapper #(
     .DEPTH  (FM_DEPTH          ),
     .AW     (FM_AW             ),
@@ -275,7 +297,6 @@ u_fm_buf0(
     .addrb	(fm_buf0_read_addr ),
     .dob	(fm_buf0_read_data )
 );
-
 // spare buffer for ping pong
 dpram_wrapper #(
     .DEPTH  (FM_DEPTH          ),
