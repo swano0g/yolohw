@@ -48,7 +48,6 @@ module top_tb;
     reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
     reg  [4:0]                  q_layer;
     reg                         q_load_ifm;
-    reg  [W_CHANNEL-1:0]        q_outchn;
     reg                         q_load_filter;
     wire                        load_filter_done;
 
@@ -73,7 +72,6 @@ module top_tb;
     wire [FILTER_DW-1:0]        filter_data_0, filter_data_1, filter_data_2, filter_data_3;
 
     // ctrl
-    wire                     fb_load_done;
     wire                     pb_sync_done;
     
     //
@@ -171,16 +169,13 @@ module top_tb;
         .q_layer            (q_layer          ),
 
         .q_load_ifm         (q_load_ifm       ),
-        // .o_load_ifm_done    (load_ifm_done    ),
-
-        .q_outchn           (q_outchn         ),
         .q_load_filter      (q_load_filter    ),
         .o_load_filter_done (load_filter_done ),
 
         // Buffer Manager <-> AXI (IFM/FILTER) : TB가 구동
         .read_data          (axi_read_data    ),
         .read_data_vld      (axi_read_data_vld),
-        .first              (axi_first        ),
+        // .first              (axi_first        ),
 
         // Buffer Manager <-> Controller 
         .c_ctrl_data_run    (ctrl_data_run    ),
