@@ -15,7 +15,9 @@
 
 
 `define IFM_DW              `W_DATA * `Tin                  // 32
+`define OFM_DW              `W_DATA * `Tout                 // 32
 `define FILTER_DW           `W_KERNEL * `K * `K             // 72
+`define PSUM_DW             `W_PSUM 
 
 
 // ADDER TREE 4
@@ -41,24 +43,29 @@
 `define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY  // 11
 
 
+// AXI
+`define AXI_WIDTH_DA            32
+
+
 
 // BUFFER
-`define BUFFER_ADDRESS_BW   14
-//
+`define BM_IB_DELAY             3   // index -> data -> reg
+`define BM_FB_DELAY             1
 
-`define BM_IB_DELAY            3   // index -> data -> reg
-`define BM_FB_DELAY            1
-
+// FEATURE MAP BUFFER
+`define FM_BUFFER_CNT           2   // IFM, OFM
+`define FM_BUFFER_DW            `IFM_DW // 32
+`define FM_BUFFER_DEPTH         65536                           // 256KB / 4B
+`define FM_BUFFER_AW            $clog2(`FM_BUFFER_DEPTH) // 256KB / 4B
 
 `define FILTER_BUFFER_CNT       `Tout
 `define FILTER_BUFFER_DW        `FILTER_DW // 72
 `define FILTER_BUFFER_DEPTH     512
 `define FILTER_BUFFER_AW        $clog2(`FILTER_BUFFER_DEPTH)
 
-
-`define IFM_TOTAL_BUFFER_DW     `IFM_DW // 32
-`define IFM_TOTAL_BUFFER_DEPTH  65536  // 256KB / 4B
-`define IFM_TOTAL_BUFFER_AW     $clog2(`IFM_TOTAL_BUFFER_DEPTH)  // 256KB / 4B
+// `define IFM_TOTAL_BUFFER_DW     `IFM_DW // 32
+// `define IFM_TOTAL_BUFFER_DEPTH  65536  // 256KB / 4B
+// `define IFM_TOTAL_BUFFER_AW     $clog2(`IFM_TOTAL_BUFFER_DEPTH)  // 256KB / 4B
 
 
 `define IFM_ROW_BUFFER_CNT      `K
@@ -66,7 +73,13 @@
 `define IFM_ROW_BUFFER_DEPTH    1536    // 6KB  / 4
 `define IFM_ROW_BUFFER_AW       $clog2(`IFM_ROW_BUFFER_DEPTH)
 
-// add psum
+
+
+
+
+// postprocessor
+`define BIAS_DW                 32
+`define SCALES_DW               32
 
 
 `endif

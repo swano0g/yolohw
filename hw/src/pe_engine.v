@@ -6,9 +6,6 @@
 module pe_engine #(
     parameter W_SIZE        = `W_SIZE,
     parameter W_CHANNEL     = `W_CHANNEL,
-    parameter W_FRAME_SIZE  = `W_FRAME_SIZE,
-    parameter W_DELAY       = `W_DELAY,
-
     
     parameter K             = `K,
     parameter Tin           = `Tin,
@@ -21,8 +18,6 @@ module pe_engine #(
     parameter W_PSUM        = `W_PSUM,
     parameter PE_DELAY      = `PE_DELAY,
 
-    parameter BUF_AW        = `BUFFER_ADDRESS_BW,
-
     parameter FILTER_BUF_AW = `FILTER_BUFFER_AW,
 
     parameter NB_FILTER     = `FILTER_BUFFER_CNT,
@@ -30,16 +25,7 @@ module pe_engine #(
     parameter PE_CAL_DELAY          = `PE_DELAY,
     parameter PE_IFM_FLAT_BW        = `PE_IFM_FLAT_BW,
     parameter PE_FILTER_FLAT_BW     = `PE_FILTER_FLAT_BW,
-    parameter PE_ACCO_FLAT_BW       = `PE_ACCO_FLAT_BW,
-    parameter PE_OUT_BW             = `W_PSUM,
-
-    // for debug test
-    parameter TEST_ROW    = `TEST_ROW,
-    parameter TEST_COL    = `TEST_COL,
-    parameter TEST_CHNIN  = `TEST_CHNIN,
-    parameter TEST_CHNOUT = `TEST_CHNOUT,
-    parameter TEST_T_CHNIN = `TEST_T_CHNIN,
-    parameter TEST_T_CHNOUT = `TEST_T_CHNOUT
+    parameter PE_ACCO_FLAT_BW       = `PE_ACCO_FLAT_BW
 )(
 
     input  wire                     clk,
@@ -52,13 +38,13 @@ module pe_engine #(
     input  wire [W_SIZE-1:0]            c_col,
     input  wire [W_CHANNEL-1:0]         c_chn,
     input  wire [W_CHANNEL-1:0]         c_chn_out,
-    // input  wire [W_FRAME_SIZE-1:0]      c_data_count,
-    // input  wire                         c_end_frame,
 
     input  wire                         c_is_first_row,
     input  wire                         c_is_last_row,
     input  wire                         c_is_first_col,
     input  wire                         c_is_last_col,
+    input  wire                         c_is_first_chn,
+    input  wire                         c_is_last_chn,
 
     input  wire [W_SIZE-1:0]            q_channel,      // tiled input channel
 
@@ -82,14 +68,15 @@ module pe_engine #(
     input  wire [FILTER_DW-1:0]     fb_data3_in,
 
 
-    // PSUM buffer
-    output wire                     o_pb_req,
-    output wire [BUF_AW-1:0]        o_pb_addr,
+    // pe_engine -> postprocessor
+    output wire [PE_ACCO_FLAT_BW-1:0]   o_pe_data,
+    output wire                         o_pe_vld, 
+    output wire [W_SIZE-1:0]            o_pe_row,
+    output wire [W_SIZE-1:0]            o_pe_col,
+    output wire [W_CHANNEL-1:0]         o_pe_chn,
+    output wire [W_CHANNEL-1:0]         o_pe_chn_out,
+    output wire                         o_pe_is_last_chn 
 
-    input  wire [W_PSUM-1:0]        pb_data_in
-
-    // control signal
-    // output wire                     o_pe_done,   // maybe needed for psum logic
 );
 
 localparam  IB_DELAY           = BM_DELAY;  // 2 calculate index -> buf -> pe
@@ -126,6 +113,9 @@ reg [W_SIZE-1:0]    col_pipe [0:STG-1];
 reg [W_CHANNEL-1:0] chn_pipe [0:STG-1];
 reg [W_CHANNEL-1:0] chn_out_pipe [0:STG-1];
 
+// chn loacation info
+reg [1:0]           chn_location_pipe [0:STG-1];
+
 // for calculation
 reg                 data_vld_pipe [0:STG-1];   // when data goes into pe
 reg [3:0]           location_pipe [0:PE_PRE_CAL_DELAY-1];   // when start calculation
@@ -149,6 +139,8 @@ always @(posedge clk or negedge rstn) begin
             col_pipe[i] <= 0;
             chn_pipe[i] <= 0;
             chn_out_pipe[i] <= 0;
+
+            chn_location_pipe[i] <= 0;
         end
     end else begin
         row_pipe[0] <= c_row;
@@ -158,6 +150,7 @@ always @(posedge clk or negedge rstn) begin
 
         data_vld_pipe[0] <= c_ctrl_data_run;
         location_pipe[0] <= {c_is_last_col, c_is_first_col, c_is_last_row, c_is_first_row};
+        chn_location_pipe[0] <= {c_is_last_chn, c_is_first_chn};
 
         for (i = 1; i < PE_PRE_CAL_DELAY; i = i + 1) begin 
             location_pipe[i] <= location_pipe[i-1];
@@ -170,6 +163,8 @@ always @(posedge clk or negedge rstn) begin
             col_pipe[i] <= col_pipe[i-1];
             chn_pipe[i] <= chn_pipe[i-1];
             chn_out_pipe[i] <= chn_out_pipe[i-1];
+
+            chn_location_pipe[i] <= chn_location_pipe[i-1];
         end
     end
 end
@@ -213,7 +208,6 @@ always @(posedge clk or negedge rstn) begin
         // possible to load filter
         if (!filter_loaded && !fb_req && fb_req_possible) begin 
             fb_req <= 1;
-            // filter_data_vld_pipe[0] <= 1;
             filter_data_vld_pipe[0] <= 0;
             
             filter_offset_pipe[0] <= filter_offset;
@@ -224,9 +218,7 @@ always @(posedge clk or negedge rstn) begin
                 fb_req <= 0;
                 filter_loaded <= 1;
                 filter_offset <= 0;
-                // filter_data_vld_pipe[0] <= 0;
                 filter_data_vld_pipe[0] <= 1;
-                // filter_offset_pipe[0] <= 0;
                 filter_offset_pipe[0] <= filter_offset;
 
                 if (filter_idx == q_channel - 1) begin 
@@ -271,63 +263,21 @@ assign o_fb_addr = fb_addr;
 assign t_change_filter = data_vld_pipe[PE_PRE_CAL_DELAY-2] && location_pipe[PE_PRE_CAL_DELAY-2][2];
 
 
-// pe csync done signal
-reg csync_done;
-
-always @(posedge clk or negedge rstn) begin 
-    if (!rstn) begin 
-        csync_done <= 0;
-    end else begin 
-        if (filter_loaded && c_ctrl_csync_run) begin 
-            csync_done <= 1;
-        end else begin 
-            csync_done <= 0;
-        end
-    end   
-end
-
-assign o_pe_csync_done = csync_done;
+// csync done signal
+assign o_pe_csync_done = filter_loaded & c_ctrl_csync_run;
 
 
-
-// 4. psum (incomplete)
-// for debugging
-reg [W_PSUM-1:0] psumbuf [65536-1:0]; // dbg      
-
-
+// 4. outputs to postprocessor
 wire [PE_ACCO_FLAT_BW-1:0] acc_flat;
 wire                   vld;
 
-
-wire [PE_OUT_BW-1:0] acc_arr [0:Tout-1];
-genvar g;
-generate
-    for (g = 0; g < Tout; g = g + 1) begin : UNPACK_ACC
-        assign acc_arr[g] = acc_flat[(g+1)*PE_OUT_BW-1 -: PE_OUT_BW];
-    end
-endgenerate
-
-
-localparam PSUM_IDX_W = 20;
-reg [PSUM_IDX_W-1:0] idx0; // base address
-
-
-always @(posedge clk or negedge rstn) begin
-    if (!rstn) begin
-        idx0 <= {PSUM_IDX_W{1'b0}};
-        for (i = 0; i < 65536; i = i + 1) begin 
-            psumbuf[i] <= 0;
-        end
-    end
-    else if (vld) begin
-        idx0 = (row_pipe[STG-1]* TEST_COL + col_pipe[STG-1]) * TEST_CHNOUT + chn_out_pipe[STG-1]* Tout;
-
-        psumbuf[idx0 + 0] <= $signed(psumbuf[idx0 + 0]) + $signed(acc_arr[0]);
-        psumbuf[idx0 + 1] <= $signed(psumbuf[idx0 + 1]) + $signed(acc_arr[1]);
-        psumbuf[idx0 + 2] <= $signed(psumbuf[idx0 + 2]) + $signed(acc_arr[2]);
-        psumbuf[idx0 + 3] <= $signed(psumbuf[idx0 + 3]) + $signed(acc_arr[3]);
-    end
-end
+assign o_pe_data        = acc_flat;
+assign o_pe_vld         = vld;
+assign o_pe_row         = row_pipe[STG-1];
+assign o_pe_col         = col_pipe[STG-1];
+assign o_pe_chn         = chn_pipe[STG-1];
+assign o_pe_chn_out     = chn_out_pipe[STG-1];
+assign o_pe_is_last_chn = chn_location_pipe[STG-1][1];
 
 
 // 5. DUT: conv_pe

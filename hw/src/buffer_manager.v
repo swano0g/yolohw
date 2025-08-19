@@ -7,18 +7,31 @@ module buffer_manager #(
     parameter W_CHANNEL     = `W_CHANNEL,
 
     parameter BM_DELAY      = `BM_IB_DELAY - 1, // 2; output port reg -> only 2cycle delay inside BM
-    parameter IFM_DW        = `IFM_DW,      // 32
-    parameter FILTER_DW     = `FILTER_DW,   // 72
-
+    parameter IFM_DW        = `IFM_DW,          // 32
+    parameter OFM_DW        = `OFM_DW,          // 32
+    parameter FILTER_DW     = `FILTER_DW,       // 72
 
     parameter FILTER_DEPTH = `FILTER_BUFFER_DEPTH,
     parameter FILTER_AW    = `FILTER_BUFFER_AW,
 
-    parameter IFM_DEPTH   = `IFM_TOTAL_BUFFER_DEPTH,
-    parameter IFM_AW      = `IFM_TOTAL_BUFFER_AW,
+    // feature map
+    parameter FM_DEPTH    = `FM_BUFFER_DEPTH,
+    parameter FM_AW       = `FM_BUFFER_AW,
+    parameter FM_DW       = `FM_BUFFER_DW,
+
+
+    parameter IFM_DEPTH   = `FM_BUFFER_DEPTH,
+    parameter IFM_AW      = `FM_BUFFER_AW,
+
+    parameter OFM_DEPTH   = `FM_BUFFER_DEPTH,
+    parameter OFM_AW      = `FM_BUFFER_AW,
+
 
     parameter ROW_DEPTH   = `IFM_ROW_BUFFER_DEPTH,
-    parameter ROW_AW      = `IFM_ROW_BUFFER_AW
+    parameter ROW_AW      = `IFM_ROW_BUFFER_AW,
+
+    // AXI
+    parameter AXI_WIDTH_DA = `AXI_WIDTH_DA
 )(
     input  wire               clk,
     input  wire               rstn,
@@ -31,40 +44,20 @@ module buffer_manager #(
 
     input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용
 
-    input  wire                     q_load_ifm,         // ifm 로드 시작 시그널
-    output wire                     o_load_ifm_done,    // ifm 로드 완료 시그널
+    input  wire                     q_load_ifm,             // ifm load start
+    // output wire                     o_load_ifm_done,     // ifm load done
 
-    input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
+    // input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
     input  wire                     q_load_filter,          // filter 로드 시작 시그널
     output wire                     o_load_filter_done,     // filter 로드 완료 시그널
 
+    input  wire                     q_fm_buf_switch,        // ofm <-> ifm switch
+
+
     // Buffer Manager <-> AXI
-    // AXI signals to load ifm, filter
-    // AXI mimic for ifm_buf
-    input  wire                     dbg_axi_ib_ena,
-    input  wire [IFM_AW-1:0]        dbg_axi_ib_addra,
-    input  wire                     dbg_axi_ib_wea,
-    input  wire [IFM_DW-1:0]        dbg_axi_ib_dia,
-    // AXI mimic for filter_buf0
-    input  wire                    dbg_axi_fb0_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb0_addra,
-    input  wire                    dbg_axi_fb0_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb0_dia,
-    // AXI mimic for filter_buf1
-    input  wire                    dbg_axi_fb1_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb1_addra,
-    input  wire                    dbg_axi_fb1_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb1_dia,
-    // AXI mimic for filter_buf2
-    input  wire                    dbg_axi_fb2_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb2_addra,
-    input  wire                    dbg_axi_fb2_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb2_dia,
-    // AXI mimic for filter_buf3
-    input  wire                    dbg_axi_fb3_ena,
-    input  wire [FILTER_AW-1:0]    dbg_axi_fb3_addra,
-    input  wire                    dbg_axi_fb3_wea,
-    input  wire [FILTER_DW-1:0]    dbg_axi_fb3_dia,
+    input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
+    input  wire                     read_data_vld,  // whether valid
+    // input  wire                     first,          // not use
 
 
     //
@@ -105,7 +98,7 @@ module buffer_manager #(
 
 
 //============================================================================
-// internal signals
+//  . internal signals
 //============================================================================
 reg  csync_d;
 reg  data_d;
@@ -159,7 +152,6 @@ wire c_is_first_col_d  = control_pipe[BM_DELAY-1][IS_FIRST_COL];
 wire c_is_last_col_d   = control_pipe[BM_DELAY-1][IS_LAST_COL];
 wire c_is_first_chn_d  = control_pipe[BM_DELAY-1][IS_FIRST_CHN];
 wire c_is_last_chn_d   = control_pipe[BM_DELAY-1][IS_LAST_CHN];
-
 //============================================================================
 
 
@@ -167,62 +159,137 @@ wire c_is_last_chn_d   = control_pipe[BM_DELAY-1][IS_LAST_CHN];
 // I. FEATURE MAP BUFFER & AXI
 //============================================================================
 // ifm buf & ofm buf ping-pong
+localparam  IFM = 1'b0,
+            OFM = 1'b1;
 
+reg  fm_buf0_ptr, fm_buf1_ptr;
+
+always @(posedge clk or negedge rstn) begin 
+    if (!rstn) begin 
+        fm_buf0_ptr <= IFM;
+        fm_buf1_ptr <= OFM;
+    end else begin 
+        if (q_fm_buf_switch) begin 
+            {fm_buf1_ptr, fm_buf0_ptr} <= {fm_buf0_ptr, fm_buf1_ptr};
+        end
+    end
+end
+//----------------------------------------------------------------------------
+wire [FM_AW-1:0]     fm_buf0_write_addr;
+wire                 fm_buf0_wea;
+wire [FM_DW-1:0]     fm_buf0_write_data;
+wire                 fm_buf0_read_en;
+wire [FM_AW-1:0]     fm_buf0_read_addr;
+wire [FM_DW-1:0]     fm_buf0_read_data;
+
+
+wire [FM_AW-1:0]     fm_buf1_write_addr;
+wire                 fm_buf1_wea;
+wire [FM_DW-1:0]     fm_buf1_write_data;
+wire                 fm_buf1_read_en;
+wire [FM_AW-1:0]     fm_buf1_read_addr;
+wire [FM_DW-1:0]     fm_buf1_read_data;
+//----------------------------------------------------------------------------
 wire [IFM_AW-1:0]    ifm_buf_read_addr;
 wire [IFM_DW-1:0]    ifm_buf_read_data;
-
 wire                 ifm_buf_read_en;
 
-// wire [IFM_AW-1:0]    ofm_buf_read_addr;
-// wire [IFM_DW-1:0]    ofm_buf_read_data;
+wire [OFM_AW-1:0]    ofm_buf_write_addr;
+wire [OFM_DW-1:0]    ofm_buf_write_data;
+wire                 ofm_buf_wea;
+//----------------------------------------------------------------------------
+// AXI APPEND
+reg q_load_ifm_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) q_load_ifm_d <= 1'b0;
+    else       q_load_ifm_d <= q_load_ifm;
+end
+wire load_start = q_load_ifm & ~q_load_ifm_d;
+
+reg                 axi_ifm_ena;
+reg                 axi_ifm_wr_en;
+reg [IFM_AW-1:0]    axi_ifm_wr_addr;
+reg [IFM_DW-1:0]    axi_ifm_wr_data;
 
 
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        axi_ifm_ena     <= 0;
+        axi_ifm_wr_en   <= 0;
+        axi_ifm_wr_addr <= 0;
+        axi_ifm_wr_data <= 0;
+    end else begin
+        axi_ifm_ena     <= q_load_ifm;
+        axi_ifm_wr_en   <= q_load_ifm & read_data_vld;
+        axi_ifm_wr_data <= read_data;
 
-// AXI mimic
-// wire                dbg_axi_ib_ena;
-// wire [IFM_AW-1:0]   dbg_axi_ib_addra;
-// wire                dbg_axi_ib_wea;
-// wire [IFM_DW-1:0]   dbg_axi_ib_dia;
+        if (load_start) begin
+            axi_ifm_wr_addr <= 0;
+        end else if (axi_ifm_wr_en) begin
+            axi_ifm_wr_addr <= axi_ifm_wr_addr + 1'b1;
+        end
+    end
+end
+//----------------------------------------------------------------------------
+assign fm_buf0_wea        = (axi_ifm_ena)      ? axi_ifm_wr_en     
+                          : (fm_buf0_ptr==OFM) ? ofm_buf_wea        
+                          : 1'b0;
 
+assign fm_buf0_write_addr = (axi_ifm_ena)      ? axi_ifm_wr_addr     
+                          : (fm_buf0_ptr==OFM) ? ofm_buf_write_addr 
+                          : {FM_AW{1'b0}};
 
+assign fm_buf0_write_data = (axi_ifm_ena)      ? axi_ifm_wr_data
+                          : (fm_buf0_ptr==OFM) ? ofm_buf_write_data 
+                          : {FM_DW{1'b0}};
 
-// dpram_65536x32, entire fm buffer
+assign fm_buf0_read_en    = (fm_buf0_ptr==IFM) ? ifm_buf_read_en    : 1'b0;
+assign fm_buf0_read_addr  = (fm_buf0_ptr==IFM) ? ifm_buf_read_addr  : {FM_AW{1'b0}};
+
+assign fm_buf1_wea        = (fm_buf1_ptr==OFM) ? ofm_buf_wea        : 1'b0;
+assign fm_buf1_write_addr = (fm_buf1_ptr==OFM) ? ofm_buf_write_addr : {FM_AW{1'b0}};
+assign fm_buf1_write_data = (fm_buf1_ptr==OFM) ? ofm_buf_write_data : {FM_DW{1'b0}};
+assign fm_buf1_read_en    = (fm_buf1_ptr==IFM) ? ifm_buf_read_en    : 1'b0;
+assign fm_buf1_read_addr  = (fm_buf1_ptr==IFM) ? ifm_buf_read_addr  : {FM_AW{1'b0}};
+
+assign ifm_buf_read_data  = (fm_buf0_ptr==IFM) ? fm_buf0_read_data :
+                            (fm_buf1_ptr==IFM) ? fm_buf1_read_data :
+                            {IFM_DW{1'b0}};
+//----------------------------------------------------------------------------
+// dpram_65536x32
 dpram_wrapper #(
-    .DEPTH  (IFM_DEPTH        ),
-    .AW     (IFM_AW           ),
-    .DW     (IFM_DW           ))
+    .DEPTH  (FM_DEPTH          ),
+    .AW     (FM_AW             ),
+    .DW     (FM_DW             ))
 u_fm_buf0(    
-    .clk	(clk		      ),
+    .clk	(clk		       ),
     // write port
-    .ena	(dbg_axi_ib_ena   ),
-	.addra	(dbg_axi_ib_addra ),
-	.wea	(dbg_axi_ib_wea   ),
-	.dia	(dbg_axi_ib_dia   ),
+    .ena	(1'b1              ),
+    .addra  (fm_buf0_write_addr),
+    .wea    (fm_buf0_wea       ),
+    .dia    (fm_buf0_write_data),
     // read port
-    .enb    (ifm_buf_read_en  ),
-    .addrb	(ifm_buf_read_addr),
-    .dob	(ifm_buf_read_data)
+    .enb    (fm_buf0_read_en   ),
+    .addrb	(fm_buf0_read_addr ),
+    .dob	(fm_buf0_read_data )
 );
-
-
 // spare buffer for ping pong
-
-// dpram_wrapper #(
-//     .DEPTH  (IFM_DEPTH        ),
-//     .AW     (IFM_AW           ),
-//     .DW     (IFM_DW           ))
-// u_fm_buf1(    
-//     .clk	(clk		      ),
-//     // write port
-//     .ena	(dbg_axi_ib_ena   ),
-// 	.addra	(dbg_axi_ib_addra ),
-// 	.wea	(dbg_axi_ib_wea   ),
-// 	.dia	(dbg_axi_ib_dia   ),
-//     // read port
-//     .enb    (1'd1             ),  // Always Read       
-//     .addrb	(ifm_buf_read_addr),
-//     .dob	(ifm_buf_read_data)
-// );
+dpram_wrapper #(
+    .DEPTH  (FM_DEPTH          ),
+    .AW     (FM_AW             ),
+    .DW     (FM_DW             ))
+u_fm_buf1(    
+    .clk	(clk		       ),
+    // write port
+    .ena	(1'b1              ),
+    .addra  (fm_buf1_write_addr),
+    .wea    (fm_buf1_wea       ),
+    .dia    (fm_buf1_write_data),
+    // read port
+    .enb    (fm_buf1_read_en   ),
+    .addrb	(fm_buf1_read_addr ),
+    .dob	(fm_buf1_read_data )
+);
 //============================================================================
 
 
@@ -231,116 +298,171 @@ u_fm_buf0(
 //============================================================================
 // II. FILTER BUFFER & AXI
 //============================================================================
+reg armed, q_load_filter_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        armed <= 1'b0; q_load_filter_d <= 1'b0;
+    end else begin      
+        q_load_filter_d <= q_load_filter;
+        if (q_load_filter & ~q_load_filter_d) armed <= 1'b1;
+        if (armed && read_data_vld)           armed <= 1'b0;
+    end
+end
 
+wire f_start  = armed & read_data_vld;
+wire f_in_vld = q_load_filter & read_data_vld; 
+
+
+wire [FILTER_AW-1:0] fb_last_addr = (q_channel << 2) -1'b1;
+
+
+reg [FILTER_DW-1:0] acc0, acc1, acc2, acc3; 
+reg [FILTER_AW-1:0] f_wr_addr; 
+
+reg  [3:0] kpos;
+wire [3:0] kpos_use = f_start ? 4'd0 : kpos; 
+wire [3:0] kpos_nxt = f_start ? 4'd1
+                              : (f_in_vld ? ((kpos==4'd8) ? 4'd0 : (kpos+4'd1)) : kpos);
+
+wire      kcommit = f_in_vld && (kpos == 4'd8);
+reg       kcommit_d;
+//----------------------------------------------------------------------------
+always @(posedge clk or negedge rstn) begin
+    if(!rstn) begin
+        kpos <= 4'd0;
+
+        acc0 <= {FILTER_DW{1'b0}}; 
+        acc1 <= {FILTER_DW{1'b0}}; 
+        acc2 <= {FILTER_DW{1'b0}}; 
+        acc3 <= {FILTER_DW{1'b0}};
+
+        f_wr_addr <= {FILTER_AW{1'b0}};
+
+        kcommit_d <= 1'b0;
+    end else begin
+        if (f_start) begin
+            kpos      <= 4'd0;
+            f_wr_addr <= 0;
+            acc0 <= 0; acc1 <= 0; acc2 <= 0; acc3 <= 0;
+        end
+
+        if (f_in_vld) begin
+            acc0[8*kpos_use +: 8] <= read_data[ 7: 0];   // F0
+            acc1[8*kpos_use +: 8] <= read_data[15: 8];   // F1
+            acc2[8*kpos_use +: 8] <= read_data[23:16];   // F2
+            acc3[8*kpos_use +: 8] <= read_data[31:24];   // F3
+        end
+        kpos <= kpos_nxt;
+
+        kcommit_d <= kcommit;
+        if (kcommit_d) begin
+            if (f_wr_addr == fb_last_addr) begin
+                f_wr_addr <= {FILTER_AW{1'b0}};
+            end else begin
+                f_wr_addr <= f_wr_addr + 1'b1;
+            end
+        end
+    end
+end
+//----------------------------------------------------------------------------
+// fb_req_possible
+// catch last write address
+wire filter_last_write = kcommit_d & (f_wr_addr == fb_last_addr);
+
+reg fb_req_possible_r, fb_req_possible_r_d;
+always @(posedge clk or negedge rstn) begin
+    if (!rstn || csync_start) begin
+        fb_req_possible_r <= 1'b0;
+        fb_req_possible_r_d <= 1'b0;
+    end else begin 
+        if (filter_last_write) fb_req_possible_r <= 1'b1;
+        fb_req_possible_r_d <= fb_req_possible_r;
+    end
+end
+
+assign fb_req_possible = fb_req_possible_r;
+assign o_load_filter_done = fb_req_possible_r & ~fb_req_possible_r_d;
+//----------------------------------------------------------------------------
+wire                    fb_ena;
+wire                    fb_wea;
+wire [FILTER_DW-1:0]    fb0_wdata, fb1_wdata, fb2_wdata, fb3_wdata;
+
+assign fb_ena = q_load_filter;
+assign fb_wea = kcommit_d;
+assign fb0_wdata = acc0;
+assign fb1_wdata = acc1;
+assign fb2_wdata = acc2;
+assign fb3_wdata = acc3;
+//----------------------------------------------------------------------------
 // dpram_512x72
-
-// AXI mimic
-// wire                    dbg_axi_fb0_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb0_addra;
-// wire                    dbg_axi_fb0_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb0_dia;
-
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf0(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb0_ena    ),
-    .addra  (dbg_axi_fb0_addra  ),
-    .wea    (dbg_axi_fb0_wea    ),
-    .dia    (dbg_axi_fb0_dia    ),
+    .ena    (fb_ena         ),
+    .addra  (f_wr_addr      ),
+    .wea    (fb_wea         ),
+    .dia    (fb0_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data0_out   )
 );
 
-// AXI mimic
-// wire                    dbg_axi_fb1_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb1_addra;
-// wire                    dbg_axi_fb1_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb1_dia;
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf1(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb1_ena    ),
-    .addra  (dbg_axi_fb1_addra  ),
-    .wea    (dbg_axi_fb1_wea    ),
-    .dia    (dbg_axi_fb1_dia    ),
+    .ena    (fb_ena         ),
+    .addra  (f_wr_addr      ),
+    .wea    (fb_wea         ),
+    .dia    (fb1_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data1_out   )
 );
 
-
-// AXI mimic
-// wire                    dbg_axi_fb2_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb2_addra;
-// wire                    dbg_axi_fb2_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb2_dia;
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf2(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb2_ena    ),
-    .addra  (dbg_axi_fb2_addra  ),
-    .wea    (dbg_axi_fb2_wea    ),
-    .dia    (dbg_axi_fb2_dia    ),
+    .ena    (fb_ena         ),
+    .addra  (f_wr_addr      ),
+    .wea    (fb_wea         ),
+    .dia    (fb2_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data2_out   )
 );
 
-
-
-// AXI mimic
-// wire                    dbg_axi_fb3_ena;
-// wire [FILTER_AW-1:0]    dbg_axi_fb3_addra;
-// wire                    dbg_axi_fb3_wea;
-// wire [FILTER_DW-1:0]    dbg_axi_fb3_dia;
 dpram_wrapper #(
     .DEPTH  (FILTER_DEPTH   ),
     .AW     (FILTER_AW      ),
     .DW     (FILTER_DW      ))
 u_filter_buf3(    
     .clk	(clk		    ),
-    .ena    (dbg_axi_fb3_ena    ),
-    .addra  (dbg_axi_fb3_addra  ),
-    .wea    (dbg_axi_fb3_wea    ),
-    .dia    (dbg_axi_fb3_dia    ),
+    .ena    (fb_ena         ),
+    .addra  (f_wr_addr      ),
+    .wea    (fb_wea         ),
+    .dia    (fb3_wdata      ),
     .enb    (fb_req         ), 
     .addrb	(fb_addr        ),
     .dob	(fb_data3_out   )
 );
-
-
-// fb_req_possible
-// catch last write address
-wire [FILTER_AW-1:0] fb_last_addr = ( {{(FILTER_AW-W_CHANNEL){1'b0}}, q_channel} << 2 ) - 1'b1;
-wire filter_last_write = dbg_axi_fb3_ena & dbg_axi_fb3_wea & (dbg_axi_fb3_addra == fb_last_addr);
-
-
-reg fb_req_possible_r;
-always @(posedge clk or negedge rstn) begin
-    if (!rstn || csync_start) fb_req_possible_r <= 1'b0;
-    else if (filter_last_write) fb_req_possible_r <= 1'b1;
-end
-
-assign fb_req_possible = fb_req_possible_r;
 //============================================================================
 
 
 
 
 
-//========================================================================================================================================================
+//============================================================================
 // III. ROW BUFFER
-//========================================================================================================================================================
+//============================================================================
 //----------------------------------------------------------------------------
 // III-1) row buf pointer
 //----------------------------------------------------------------------------
@@ -547,7 +669,7 @@ u_row_buf2(
     .dob	(row2_dout                              ) 
 );
 //----------------------------------------------------------------------------
-//========================================================================================================================================================
+//============================================================================
 
 
 assign o_bm_csync_done = c_ctrl_csync_run & fb_req_possible & pf_done;

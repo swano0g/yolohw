@@ -2,7 +2,7 @@
 `include "controller_params.vh"
 `include "sim_cfg.vh"
 
-module bm_tb;
+module top_tb;
     //----------------------------------------------------------------------  
     // 1) 파라미터: controller_params.vh에서 import
     //----------------------------------------------------------------------  
@@ -15,7 +15,6 @@ module bm_tb;
     parameter Tout             = `Tout;
 
     parameter IFM_DW           = `IFM_DW;
-//    parameter IFM_AW           = `IFM_TOTAL_BUFFER_AW;
     parameter IFM_AW           = `FM_BUFFER_AW;
 
     parameter FILTER_DW        = `FILTER_DW;
@@ -26,6 +25,8 @@ module bm_tb;
     parameter PE_IFM_FLAT_BW    = `PE_IFM_FLAT_BW;
     parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW;
     parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW;
+
+    parameter AXI_WIDTH_DA      = `AXI_WIDTH_DA;
 
     localparam CLK_PERIOD   = 10; // 100 MHz
 
@@ -47,43 +48,20 @@ module bm_tb;
     reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
     reg  [4:0]                  q_layer;
     reg                         q_load_ifm;
-    wire                        load_ifm_done;
-    reg  [W_CHANNEL-1:0]        q_outchn;
     reg                         q_load_filter;
     wire                        load_filter_done;
 
     // DRAM
     // 256KB ifm
-    reg  [IFM_DW-1:0]           ifm_dram    [0:65536-1];
-    reg  [FILTER_DW-1:0]        filter_dram [0:65536-1];
+    reg  [AXI_WIDTH_DA-1:0]     ifm_dram    [0:65536-1];
+    reg  [AXI_WIDTH_DA-1:0]     filter_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect      [0:65536-1];
 
-    // IFM AXI mimic (TB에서 구동)
-    reg                         dbg_axi_ib_ena;
-    reg  [IFM_AW-1:0]           dbg_axi_ib_addra;
-    reg                         dbg_axi_ib_wea;
-    reg  [IFM_DW-1:0]           dbg_axi_ib_dia;
 
-    // FILTER AXI mimic (TB에서 구동)
-    reg                         dbg_axi_fb0_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb0_addra;
-    reg                         dbg_axi_fb0_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb0_dia;
-
-    reg                         dbg_axi_fb1_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb1_addra;
-    reg                         dbg_axi_fb1_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb1_dia;
-
-    reg                         dbg_axi_fb2_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb2_addra;
-    reg                         dbg_axi_fb2_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb2_dia;
-
-    reg                         dbg_axi_fb3_ena;
-    reg  [FILTER_AW-1:0]        dbg_axi_fb3_addra;
-    reg                         dbg_axi_fb3_wea;
-    reg  [FILTER_DW-1:0]        dbg_axi_fb3_dia;
+    // IFM, FILTER AXI
+    reg [AXI_WIDTH_DA-1:0]      axi_read_data;      // data from axi
+    reg                         axi_read_data_vld;  // whether valid
+    reg                         axi_first;          //
 
 
     // BM <-> PE (IFM/FILTER) 연결선
@@ -94,7 +72,6 @@ module bm_tb;
     wire [FILTER_DW-1:0]        filter_data_0, filter_data_1, filter_data_2, filter_data_3;
 
     // ctrl
-    wire                     fb_load_done;
     wire                     pb_sync_done;
     
     //
@@ -125,6 +102,15 @@ module bm_tb;
     wire                     layer_done;
     wire                     bm_csync_done;
     wire                     pe_csync_done;
+
+    // pe -> postprocessor 연결선 
+    wire [PE_ACCO_FLAT_BW-1:0]   pe_data;
+    wire                         pe_vld;
+    wire [W_SIZE-1:0]            pe_row;
+    wire [W_SIZE-1:0]            pe_col;
+    wire [W_CHANNEL-1:0]         pe_chn;
+    wire [W_CHANNEL-1:0]         pe_chn_out;
+    wire                         pe_is_last_chn; 
 
     //----------------------------------------------------------------------  
     // 3) clock & reset
@@ -183,38 +169,14 @@ module bm_tb;
         .q_layer            (q_layer          ),
 
         .q_load_ifm         (q_load_ifm       ),
-        .o_load_ifm_done    (load_ifm_done    ),
-
-        .q_outchn           (q_outchn         ),
         .q_load_filter      (q_load_filter    ),
         .o_load_filter_done (load_filter_done ),
 
         // Buffer Manager <-> AXI (IFM/FILTER) : TB가 구동
-        .dbg_axi_ib_ena     (dbg_axi_ib_ena   ),
-        .dbg_axi_ib_addra   (dbg_axi_ib_addra ),
-        .dbg_axi_ib_wea     (dbg_axi_ib_wea   ),
-        .dbg_axi_ib_dia     (dbg_axi_ib_dia   ),
+        .read_data          (axi_read_data    ),
+        .read_data_vld      (axi_read_data_vld),
+        // .first              (axi_first        ),
 
-        .dbg_axi_fb0_ena    (dbg_axi_fb0_ena  ),
-        .dbg_axi_fb0_addra  (dbg_axi_fb0_addra),
-        .dbg_axi_fb0_wea    (dbg_axi_fb0_wea  ),
-        .dbg_axi_fb0_dia    (dbg_axi_fb0_dia  ),
-
-        .dbg_axi_fb1_ena    (dbg_axi_fb1_ena  ),
-        .dbg_axi_fb1_addra  (dbg_axi_fb1_addra),
-        .dbg_axi_fb1_wea    (dbg_axi_fb1_wea  ),
-        .dbg_axi_fb1_dia    (dbg_axi_fb1_dia  ),
-
-        .dbg_axi_fb2_ena    (dbg_axi_fb2_ena  ),
-        .dbg_axi_fb2_addra  (dbg_axi_fb2_addra),
-        .dbg_axi_fb2_wea    (dbg_axi_fb2_wea  ),
-        .dbg_axi_fb2_dia    (dbg_axi_fb2_dia  ),
-
-        .dbg_axi_fb3_ena    (dbg_axi_fb3_ena  ),
-        .dbg_axi_fb3_addra  (dbg_axi_fb3_addra),
-        .dbg_axi_fb3_wea    (dbg_axi_fb3_wea  ),
-        .dbg_axi_fb3_dia    (dbg_axi_fb3_dia  ),
-        //
         // Buffer Manager <-> Controller 
         .c_ctrl_data_run    (ctrl_data_run    ),
         .c_ctrl_csync_run   (ctrl_csync_run   ),
@@ -262,6 +224,8 @@ module bm_tb;
         .c_is_last_row (is_last_row),
         .c_is_first_col(is_first_col),
         .c_is_last_col (is_last_col),
+        .c_is_first_chn(is_first_chn),
+        .c_is_last_chn (is_last_chn),
 
         .q_channel(q_channel),
 
@@ -280,13 +244,47 @@ module bm_tb;
         .fb_data2_in(filter_data_2),
         .fb_data3_in(filter_data_3),
 
-        .o_pb_req(pb_req),
-        .o_pb_addr(pb_addr),
-
-        .pb_data_in(psum_data)
+        // pe_engine -> postprocessor
+        .o_pe_data(pe_data),
+        .o_pe_vld(pe_vld), 
+        .o_pe_row(pe_row),
+        .o_pe_col(pe_col),
+        .o_pe_chn(pe_chn),
+        .o_pe_chn_out(pe_chn_out),
+        .o_pe_is_last_chn(pe_is_last_chn) 
     );
     //----------------------------------------------------------------------  
-    // 7) dram -> bram mimic
+    // 7) postprocessor instance
+    //----------------------------------------------------------------------  
+    postprocessor u_postprocessor (
+        .clk(clk),
+        .rstn(rstn),
+
+        // postprocessor <-> top
+        .q_layer(q_layer),
+        
+        .q_width(q_width),
+        .q_height(q_height),
+        .q_channel(q_channel),    
+        .q_channel_out(q_channel_out),
+
+        // postprocessor <-> pe_engine
+        .pe_data_i(pe_data),
+        .pe_vld_i(pe_vld), 
+        .pe_row_i(pe_row),
+        .pe_col_i(pe_col),
+        .pe_chn_i(pe_chn),
+        .pe_chn_out_i(pe_chn_out),
+        .pe_is_last_chn(pe_is_last_chn), 
+
+        // postprocessor <-> buffer_manager
+        .o_pp_data_vld(),
+        .o_pp_data(),
+        .o_pp_addr()
+    );
+    
+    //----------------------------------------------------------------------  
+    // 8) AXI mimic
     //----------------------------------------------------------------------  
     function integer rand0_to_N;
         input integer N;
@@ -299,151 +297,100 @@ module bm_tb;
     endfunction
 
     initial begin 
-        // IFM
-        dbg_axi_ib_ena   = 1'b0;
-        dbg_axi_ib_wea   = 1'b0;
-        dbg_axi_ib_addra = 0;
-        dbg_axi_ib_dia   = 0;
-        // FILTER
-        dbg_axi_fb0_ena   = 1'b0; dbg_axi_fb0_wea   = 1'b0; dbg_axi_fb0_addra = 0; dbg_axi_fb0_dia = 0;
-        dbg_axi_fb1_ena   = 1'b0; dbg_axi_fb1_wea   = 1'b0; dbg_axi_fb1_addra = 0; dbg_axi_fb1_dia = 0;
-        dbg_axi_fb2_ena   = 1'b0; dbg_axi_fb2_wea   = 1'b0; dbg_axi_fb2_addra = 0; dbg_axi_fb2_dia = 0;
-        dbg_axi_fb3_ena   = 1'b0; dbg_axi_fb3_wea   = 1'b0; dbg_axi_fb3_addra = 0; dbg_axi_fb3_dia = 0;
+        axi_read_data     = 0;
+        axi_read_data_vld = 0;
+        axi_first         = 0;
     end
+
+    localparam AXI_MAX_GAP   = 7;
+    localparam AXI_MAX_BURST = 15;
 
     task automatic tb_axi_ifm_from_dram (
         input integer      n_words      // 쓸 워드 수 (q_width*q_height*q_channel)
         );
-        integer i;
+        integer i, j, dly, burst_len, remaining;
         begin
-            // 1클럭당 1워드 쓰기
-            dbg_axi_ib_ena <= 1'b1;
-            dbg_axi_ib_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_ib_addra <= i[IFM_AW-1:0];
-                dbg_axi_ib_dia   <= ifm_dram[i];
-            end
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
             @(posedge clk);
-            dbg_axi_ib_ena <= 1'b0;
-            dbg_axi_ib_wea <= 1'b0;
-            dbg_axi_ib_addra <= 0;
-            dbg_axi_ib_dia   <= 0;
+
+            remaining = n_words;
+            i = 0;
+            while (remaining > 0) begin
+                burst_len = rand0_to_N(AXI_MAX_BURST) + 1;
+                if (burst_len > remaining) burst_len = remaining;
+
+                // burst 전 latency
+                dly = rand0_to_N(AXI_MAX_GAP);
+                repeat (dly) @(posedge clk);
+
+                for (j = 0; j < burst_len; j = j + 1) begin
+                    axi_read_data     <= ifm_dram[i];
+                    axi_read_data_vld <= 1'b1;
+                    @(posedge clk);
+
+                    axi_read_data_vld <= 1'b0;
+
+                    i = i + 1;
+                    remaining = remaining - 1;
+                end
+            end
+
+            // drain
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+            @(posedge clk);
         end
     endtask
 
-    task automatic tb_axi_fb0 (
-        input integer n_words,
-        input integer base_addr
-        );
-
-        integer i;
-        begin
-            dbg_axi_fb0_ena <= 1'b1; 
-            dbg_axi_fb0_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb0_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb0_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb0_ena <= 1'b0; 
-            dbg_axi_fb0_wea <= 1'b0;
-            dbg_axi_fb0_addra <= 0;
-            dbg_axi_fb0_dia   <= 0;
-        end
-    endtask
-
-    task automatic tb_axi_fb1 (
-        input integer n_words,
-        input integer base_addr
-        );
-        integer i;
-        begin
-            dbg_axi_fb1_ena <= 1'b1; 
-            dbg_axi_fb1_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb1_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb1_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb1_ena <= 1'b0; 
-            dbg_axi_fb1_wea <= 1'b0;
-            dbg_axi_fb1_addra <= 0;
-            dbg_axi_fb1_dia   <= 0;
-        end
-    endtask
-    
-    task automatic tb_axi_fb2 (
-        input integer n_words,
-        input integer base_addr
-        );
-        integer i;
-        begin
-            dbg_axi_fb2_ena <= 1'b1; 
-            dbg_axi_fb2_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb2_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb2_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb2_ena <= 1'b0; 
-            dbg_axi_fb2_wea <= 1'b0;
-            dbg_axi_fb2_addra <= 0;
-            dbg_axi_fb2_dia   <= 0;
-        end
-    endtask
-
-    task automatic tb_axi_fb3(
-        input integer n_words,
-        input integer base_addr
-        );
-        integer i;
-        begin
-            dbg_axi_fb3_ena <= 1'b1; 
-            dbg_axi_fb3_wea <= 1'b1;
-            for (i = 0; i < n_words; i = i + 1) begin
-                @(posedge clk);
-                dbg_axi_fb3_addra <= i[FILTER_AW-1:0];
-                dbg_axi_fb3_dia   <= filter_dram[base_addr+i];
-            end
-            @(posedge clk);
-            dbg_axi_fb3_ena <= 1'b0; 
-            dbg_axi_fb3_wea <= 1'b0;
-            dbg_axi_fb3_addra <= 0;
-            dbg_axi_fb3_dia   <= 0;
-        end
-    endtask
 
     task automatic tb_load_filters_in_csync (
         input integer tout_idx
         );
-        integer words, i;
+        integer n_words, i, j, remaining, burst_len;
         integer dly; 
-        integer dram_base0, dram_base1, dram_base2, dram_base3;
+        integer base_addr;
+        
         begin
-            words = (q_channel << 2);
-            dram_base0 = (4 * tout_idx + 0) * words;
-            dram_base1 = (4 * tout_idx + 1) * words;
-            dram_base2 = (4 * tout_idx + 2) * words;
-            dram_base3 = (4 * tout_idx + 3) * words;
-
-
+            n_words = (q_channel << 2) * 9;
+            base_addr = tout_idx * n_words;
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+            
             @(posedge clk); wait (ctrl_csync_run == 1'b1);
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb0(words, dram_base0);
+            @(posedge clk);
+            q_load_filter = 1;
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb1(words, dram_base1);
+            remaining = n_words;
+            i = 0;
+            while (remaining > 0) begin
+                burst_len = rand0_to_N(AXI_MAX_BURST) + 1;
+                if (burst_len > remaining) burst_len = remaining;
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb2(words, dram_base2);
+                // burst 전 latency
+                dly = rand0_to_N(AXI_MAX_GAP);
+                repeat (dly) @(posedge clk);
 
-            dly = rand0_to_N(TEST_CHNIN); repeat(dly) @(posedge clk);
-            tb_axi_fb3(words, dram_base3);
+                for (j = 0; j < burst_len; j = j + 1) begin
+                    axi_read_data     <= filter_dram[base_addr + i];
+                    axi_read_data_vld <= 1'b1;
+                    @(posedge clk);
+
+                    axi_read_data_vld <= 1'b0;
+
+                    i = i + 1;
+                    remaining = remaining - 1;
+                end
+            end
+
+            // drain
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+
+            @(posedge clk);
+            q_load_filter = 0;
+
 
             // wait csync deassert 
             if (ctrl_csync_run === 1'b1) @(negedge ctrl_csync_run);
@@ -451,7 +398,7 @@ module bm_tb;
     endtask
 
     //----------------------------------------------------------------------  
-    // 7) stimulus
+    // 9) stimulus
     //---------------------------------------------------------------------- 
     integer t;
     initial begin
@@ -465,12 +412,23 @@ module bm_tb;
         q_layer        = 0;
         q_start        = 0; 
 
+        q_load_ifm     = 0;
+        q_load_filter  = 0;
+
         t = 0;
 
         #(4*CLK_PERIOD) rstn = 1'b1;
         #(CLK_PERIOD);
 
+        // AXI load ifm
+        q_load_ifm = 1;
+        
         tb_axi_ifm_from_dram(q_width*q_height*q_channel);
+        
+        #(CLK_PERIOD);
+        q_load_ifm = 0;
+        //
+
 
         #(100*CLK_PERIOD)
             @(posedge clk) q_start = 1'b1;
@@ -497,7 +455,7 @@ module bm_tb;
 
 
     //--------------------------------------------------------------------------
-    // Initialize dram & compare output
+    // 10) Initialize dram & compare output
     //--------------------------------------------------------------------------
     initial begin 
         $readmemh(`TEST_IFM_PATH, ifm_dram);
@@ -521,8 +479,8 @@ module bm_tb;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
 
             for (i = 0; i < exp_words; i = i + 1) begin
-                got = u_pe_engine.psumbuf[i]; 
-                exp = expect[i];         // 기대값 메모리
+                got = u_postprocessor.psumbuf[i]; 
+                exp = expect[i]; 
                 if (got !== exp) begin
                     errors = errors + 1;
                     if (printed < max_print) begin
@@ -557,7 +515,6 @@ module bm_tb;
     always @(posedge clk) begin
         if (layer_done && !checked_done) begin
             checked_done <= 1'b1;
-            // 마지막 쓰기 완료 여유를 위해 1~2클럭 대기
             @(posedge clk);
             @(posedge clk);
             tb_check_psum_vs_expect();
