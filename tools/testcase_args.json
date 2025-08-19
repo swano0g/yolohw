@@ -1,0 +1,9 @@
+{
+    "testcase_no": 2,
+    "width": 8,
+    "height": 8,
+    "cin": 32,
+    "cout": 64,
+    "ifm_hex":    "tools\\data\\CONV04_input_32b.hex",
+    "filter_hex": "tools\\data\\CONV04_param_weight.hex"
+}

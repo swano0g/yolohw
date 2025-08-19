@@ -271,13 +271,13 @@ assign o_pe_csync_done = filter_loaded & c_ctrl_csync_run;
 wire [PE_ACCO_FLAT_BW-1:0] acc_flat;
 wire                   vld;
 
-assign o_pe_data     = acc_flat;
-assign o_pe_vld      = vld;
-assign o_pe_row      = row_pipe[STG-1];
-assign o_pe_col      = col_pipe[STG-1];
-assign o_pe_chn      = chn_pipe[STG-1];
-assign o_pe_chn_out  = chn_out_pipe[STG-1];
-assign o_is_last_chn = chn_location_pipe[STG-1][1];
+assign o_pe_data        = acc_flat;
+assign o_pe_vld         = vld;
+assign o_pe_row         = row_pipe[STG-1];
+assign o_pe_col         = col_pipe[STG-1];
+assign o_pe_chn         = chn_pipe[STG-1];
+assign o_pe_chn_out     = chn_out_pipe[STG-1];
+assign o_pe_is_last_chn = chn_location_pipe[STG-1][1];
 
 
 // 5. DUT: conv_pe

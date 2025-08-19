@@ -43,11 +43,14 @@
 `define PE_DELAY                `MAC_DELAY + `ADDER_TREE_DELAY  // 11
 
 
+// AXI
+`define AXI_WIDTH_DA            32
+
+
 
 // BUFFER
-
-`define BM_IB_DELAY            3   // index -> data -> reg
-`define BM_FB_DELAY            1
+`define BM_IB_DELAY             3   // index -> data -> reg
+`define BM_FB_DELAY             1
 
 // FEATURE MAP BUFFER
 `define FM_BUFFER_CNT           2   // IFM, OFM
