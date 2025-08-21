@@ -49,12 +49,15 @@ module top_tb;
     reg  [4:0]                  q_layer;
     reg                         q_load_ifm;
     reg                         q_load_filter;
+    reg                         q_load_bias;
+    reg                         q_load_scale;
     wire                        load_filter_done;
 
     // DRAM
     // 256KB ifm
     reg  [AXI_WIDTH_DA-1:0]     ifm_dram    [0:65536-1];
     reg  [AXI_WIDTH_DA-1:0]     filter_dram [0:65536-1];
+    reg  [AXI_WIDTH_DA-1:0]     affine_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect      [0:65536-1];
 
 
@@ -85,6 +88,7 @@ module top_tb;
     wire                     ctrl_csync_run;
     wire                     ctrl_psync_run;
     wire                     ctrl_data_run;
+    wire                     ctrl_psync_phase;
     wire [W_SIZE-1:0]        row;
     wire [W_SIZE-1:0]        col;
     wire [W_CHANNEL-1:0]     chn;
@@ -112,6 +116,9 @@ module top_tb;
     wire [W_CHANNEL-1:0]         pe_chn_out;
     wire                         pe_is_last_chn; 
 
+    // pp
+    wire                         pp_load_done;
+
     //----------------------------------------------------------------------  
     // 3) clock & reset
     //----------------------------------------------------------------------  
@@ -133,13 +140,18 @@ module top_tb;
         .q_channel_out     (q_channel_out     ),
         .q_frame_size      (q_frame_size      ),
         .q_start           (q_start           ),
-        .pb_sync_done      (pb_sync_done      ),
+        
         .bm_csync_done     (bm_csync_done     ),
         .pe_csync_done     (pe_csync_done     ),
+
+        .pp_load_done      (pp_load_done      ),
+        .pb_sync_done      (pb_sync_done      ),
+        
         // Outputs
         .o_ctrl_csync_run  (ctrl_csync_run    ),
         .o_ctrl_psync_run  (ctrl_psync_run    ),
         .o_ctrl_data_run   (ctrl_data_run     ),
+        .o_ctrl_psync_phase(ctrl_psync_phase  ),
         .o_is_first_row    (is_first_row      ),
         .o_is_last_row     (is_last_row       ),
         .o_is_first_col    (is_first_col      ),
@@ -268,6 +280,22 @@ module top_tb;
         .q_channel(q_channel),    
         .q_channel_out(q_channel_out),
 
+        .q_load_bias(q_load_bias),
+        .q_load_scale(q_load_scale),
+
+        // postprocessor <-> ctrl
+        .c_ctrl_csync_run(ctrl_csync_run),
+        .c_ctrl_psync_run(ctrl_psync_run),
+        .c_ctrl_psync_phase(ctrl_psync_phase),
+
+
+        .o_pp_load_done(pp_load_done),
+        .o_pb_sync_done(pb_sync_done),
+
+        // postprocessor <-> AXI
+        .read_data(axi_read_data),
+        .read_data_vld(axi_read_data_vld),
+    
         // postprocessor <-> pe_engine
         .pe_data_i(pe_data),
         .pe_vld_i(pe_vld), 
@@ -359,8 +387,10 @@ module top_tb;
             
             @(posedge clk); wait (ctrl_csync_run == 1'b1);
 
-            @(posedge clk);
-            q_load_filter = 1;
+
+            @(negedge clk);
+            q_load_filter <= 1'b1;
+            @(posedge clk); 
 
             remaining = n_words;
             i = 0;
@@ -389,11 +419,114 @@ module top_tb;
             axi_read_data     <= 0;
 
             @(posedge clk);
-            q_load_filter = 0;
+            @(negedge clk);
+            q_load_filter <= 1'b0;
+            @(posedge clk); 
 
 
             // wait csync deassert 
             if (ctrl_csync_run === 1'b1) @(negedge ctrl_csync_run);
+        end
+    endtask
+
+
+    task automatic tb_load_affine_in_prepsync (
+        );
+        integer n_words_bias, n_words_scale, i, j, remaining, burst_len;
+        integer dly; 
+        integer base_addr_bias, base_addr_scale;
+        
+        begin
+            n_words_bias = (q_channel_out << 2);
+            n_words_scale = (q_channel_out << 2);
+
+            base_addr_bias = 0;
+            base_addr_scale = (q_channel_out << 2);
+
+
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+            
+            @(posedge clk); wait (ctrl_psync_run == 1'b1);
+
+            // load bias
+            
+            @(negedge clk);
+            q_load_bias <= 1'b1;
+            @(posedge clk);  
+
+            remaining = n_words_bias;
+            i = 0;
+            while (remaining > 0) begin
+                burst_len = rand0_to_N(AXI_MAX_BURST) + 1;
+                if (burst_len > remaining) burst_len = remaining;
+
+                // burst 전 latency
+                dly = rand0_to_N(AXI_MAX_GAP);
+                repeat (dly) @(posedge clk);
+
+                for (j = 0; j < burst_len; j = j + 1) begin
+                    axi_read_data     <= affine_dram[base_addr_bias + i];
+                    axi_read_data_vld <= 1'b1;
+                    @(posedge clk);
+
+                    axi_read_data_vld <= 1'b0;
+
+                    i = i + 1;
+                    remaining = remaining - 1;
+                end
+            end
+
+            // drain
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+
+            @(negedge clk);
+            q_load_bias <= 1'b0;
+            @(posedge clk);  
+            // load bias end
+
+
+
+            // load scale
+            @(negedge clk);
+            q_load_scale <= 1'b1;
+            @(posedge clk);  
+
+            remaining = n_words_scale;
+            i = 0;
+            while (remaining > 0) begin
+                burst_len = rand0_to_N(AXI_MAX_BURST) + 1;
+                if (burst_len > remaining) burst_len = remaining;
+
+                // burst 전 latency
+                dly = rand0_to_N(AXI_MAX_GAP);
+                repeat (dly) @(posedge clk);
+
+                for (j = 0; j < burst_len; j = j + 1) begin
+                    axi_read_data     <= affine_dram[base_addr_scale + i];
+                    axi_read_data_vld <= 1'b1;
+                    @(posedge clk);
+
+                    axi_read_data_vld <= 1'b0;
+
+                    i = i + 1;
+                    remaining = remaining - 1;
+                end
+            end
+
+            // drain
+            axi_read_data_vld <= 1'b0;
+            axi_read_data     <= 0;
+
+            @(negedge clk);
+            q_load_scale <= 1'b0;
+            @(posedge clk);  
+            // load scale end
+
+
+            // wait csync deassert 
+            if (ctrl_psync_run === 1'b1) @(negedge ctrl_psync_run);
         end
     endtask
 
@@ -414,6 +547,8 @@ module top_tb;
 
         q_load_ifm     = 0;
         q_load_filter  = 0;
+        q_load_bias    = 0;
+        q_load_scale   = 0;
 
         t = 0;
 
@@ -435,6 +570,10 @@ module top_tb;
         #(4*CLK_PERIOD)
             @(posedge clk) q_start = 1'b0;
 
+        @(posedge clk);
+        tb_load_affine_in_prepsync();
+        @(posedge clk);
+
         // load filter
         for (t = 0; t < TEST_T_CHNOUT; t = t + 1) begin
             tb_load_filters_in_csync(t);
@@ -442,16 +581,18 @@ module top_tb;
     end
 
     // psum buf (pb_sync_done signal)
-    reg r_pb_sync_done;
-    initial begin
-        r_pb_sync_done = 0;
+    // TODO: reflect psync_phase 
+    // reg r_pb_sync_done;
+    // initial begin
+    //     r_pb_sync_done = 0;
 
-        @(posedge ctrl_psync_run);     
-        repeat (1000) @(posedge clk);
-        @(posedge clk) r_pb_sync_done = 1'b1;
-        @(posedge clk) r_pb_sync_done = 1'b0;
-    end
-    assign pb_sync_done = r_pb_sync_done;
+    //     wait (ctrl_psync_run == 1'b1 && ctrl_psync_phase == 1'b1);
+     
+    //     repeat (1000) @(posedge clk);
+    //     @(posedge clk) r_pb_sync_done = 1'b1;
+    //     @(posedge clk) r_pb_sync_done = 1'b0;
+    // end
+    // assign pb_sync_done = r_pb_sync_done;
 
 
     //--------------------------------------------------------------------------
@@ -460,6 +601,7 @@ module top_tb;
     initial begin 
         $readmemh(`TEST_IFM_PATH, ifm_dram);
         $readmemh(`TEST_FILT_PATH, filter_dram);
+        $readmemh(`TEST_AFFINE_PATH, affine_dram);
         $readmemh(`TEST_EXP_PATH, expect);
     end
 

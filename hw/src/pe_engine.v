@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
 `include "controller_params.vh"
-`include "sim_cfg.vh"
 
 
 module pe_engine #(
@@ -79,8 +78,8 @@ module pe_engine #(
 
 );
 
-localparam  IB_DELAY           = BM_DELAY;  // 2 calculate index -> buf -> pe
-localparam  FB_DELAY           = 1;
+localparam  IB_DELAY            = BM_DELAY;  // 2 calculate index -> buf -> pe
+localparam  FB_DELAY            = 1;
 localparam  PE_DATA_DELAY       = 1;  // pe save data
 localparam  PE_WINDOW_DELAY     = 1;  // load window
 
