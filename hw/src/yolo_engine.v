@@ -921,13 +921,15 @@ wire                     bm_csync_done;
 wire                     pe_csync_done;
 
 // pe -> postprocessor 연결선 
-wire [PE_ACCO_FLAT_BW-1:0]   pe_data;
-wire                         pe_vld;
-wire [W_SIZE-1:0]            pe_row;
-wire [W_SIZE-1:0]            pe_col;
-wire [W_CHANNEL-1:0]         pe_chn;
-wire [W_CHANNEL-1:0]         pe_chn_out;
-wire                         pe_is_last_chn; 
+wire [PE_ACCO_FLAT_BW-1:0]  pe_data;
+wire                        pe_vld;
+wire [W_SIZE-1:0]           pe_row;
+wire [W_SIZE-1:0]           pe_col;
+wire [W_CHANNEL-1:0]        pe_chn;
+wire [W_CHANNEL-1:0]        pe_chn_out;
+wire                        pe_is_last_chn; 
+
+wire                        pp_load_done;
 
 
 //---------------------------------------------------------------------- 
@@ -941,9 +943,12 @@ cnn_ctrl u_cnn_ctrl (
     .q_channel_out     (q_channel_out     ),
     .q_frame_size      (q_frame_size      ),
     .q_start           (q_c_ctrl_start    ),
-    .pb_sync_done      (pb_sync_done      ),
+
     .bm_csync_done     (bm_csync_done     ),
     .pe_csync_done     (pe_csync_done     ),
+
+    .pp_load_done      (pp_load_done      ),
+    .pb_sync_done      (pb_sync_done      ),
     // Outputs
     .o_ctrl_csync_run  (ctrl_csync_run    ),
     .o_ctrl_psync_run  (ctrl_psync_run    ),
@@ -1006,8 +1011,8 @@ buffer_manager u_buffer_manager (
 
     // Buffer Manager <-> pe_engine (FILTER)
     .fb_req_possible    (fb_req_possible  ),
-    .fb_req             (fb_req           ), // from PE
-    .fb_addr            (fb_addr          ), // from PE
+    .fb_req             (fb_req           ),
+    .fb_addr            (fb_addr          ),
 
     .fb_data0_out       (filter_data_0    ),
     .fb_data1_out       (filter_data_1    ),
@@ -1069,6 +1074,22 @@ postprocessor u_postprocessor (
     .q_height(q_height),
     .q_channel(q_channel),    
     .q_channel_out(q_channel_out),
+
+    .q_load_bias(q_load_bias),
+    .q_load_scale(q_load_scale),
+
+    // postprocessor <-> ctrl
+    .c_ctrl_csync_run(ctrl_csync_run),
+    .c_ctrl_psync_run(ctrl_psync_run),
+    .c_ctrl_psync_phase(ctrl_psync_phase),
+
+
+    .o_pp_load_done(pp_load_done),
+    .o_pb_sync_done(pb_sync_done),
+
+    // postprocessor <-> AXI
+    .read_data(read_data),
+    .read_data_vld(read_data_vld),
 
     // postprocessor <-> pe_engine
     .pe_data_i(pe_data),
