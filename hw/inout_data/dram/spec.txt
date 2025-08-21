@@ -1,14 +1,18 @@
-path   : hw\inout_data\dram\test1_memory.hex
-ifm    : 0
-filter : 1024
-bias   : 2176
-scale  : 2208
-total  : 2240 lines  
+ path   : C:\Users\rain0\hw_prj\AIX_source\hw\inout_data\dram\test1_memory.hex
+offset
+ ifm    : 0
+ filter : 4096
+ bias   : 8704
+ scale  : 8832
+ total  : 8960 bytes
+ total  : 2240 lines
 
-path   : hw\inout_data\dram\test2_memory.hex
-ifm    : 0
-filter : 512
-bias   : 5120
-bias   : 5120
-scale  : 5184
-total  : 5248 lines
+ path   : C:\Users\rain0\hw_prj\AIX_source\hw\inout_data\dram\test2_memory.hex
+offset
+ ifm    : 0
+ filter : 2048
+ bias   : 20480
+ scale  : 20736
+ total  : 20992 bytes
+ total  : 5248 lines
+ 

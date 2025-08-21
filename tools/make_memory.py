@@ -238,10 +238,12 @@ def main(argv: list[str]) -> None:
     # 섹션 시작 인덱스 및 요약 출력
     print("[OK] DRAM memory image built")
     print(f" path   : {info['memory_path']}")
-    print(f" ifm    : {info['ifm']}")
-    print(f" filter : {info['filter']}")
-    print(f" bias   : {info['bias']}")
-    print(f" scale  : {info['scale']}")
+    print("offset")
+    print(f" ifm    : {info['ifm'] * 4}")
+    print(f" filter : {info['filter'] * 4}")
+    print(f" bias   : {info['bias'] * 4}")
+    print(f" scale  : {info['scale'] * 4}")
+    print(f" total  : {info['total_lines'] * 4} bytes")
     print(f" total  : {info['total_lines']} lines")
 
 
