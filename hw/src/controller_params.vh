@@ -79,7 +79,12 @@
 
 // postprocessor
 `define BIAS_DW                 32
-`define SCALES_DW               32
+`define BIAS_BUFFER_DEPTH       512
+`define BIAS_BUFFER_AW          $clog2(`BIAS_BUFFER_DEPTH)
+
+`define SCALE_DW                32
+`define SCALE_BUFFER_DEPTH      512
+`define SCALE_BUFFER_AW         $clog2(`SCALE_BUFFER_DEPTH)
 
 
 `endif

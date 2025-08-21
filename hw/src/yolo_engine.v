@@ -1,4 +1,5 @@
 `include "controller_params.vh"
+`include "sim_cfg.vh"
 //----------------------------------------------------------------+
 // Project: Deep Learning Hardware Design Contest
 // Module: yolo_engine
@@ -18,11 +19,28 @@ module yolo_engine #(
     parameter WBUF_DS = WBUF_DW/8,
     parameter MEM_BASE_ADDR = 'h8000_0000,
     parameter MEM_DATA_BASE_ADDR = 4096,
-    
+
+
     parameter W_SIZE        = `W_SIZE,
     parameter W_CHANNEL     = `W_CHANNEL,
     parameter W_FRAME_SIZE  = `W_FRAME_SIZE,
-    parameter W_DELAY       = `W_DELAY
+    parameter W_DELAY       = `W_DELAY,
+    parameter K                 = `K,
+    parameter Tin               = `Tin,
+    parameter Tout              = `Tout,
+
+    parameter IFM_DW            = `IFM_DW,
+    parameter IFM_AW            = `FM_BUFFER_AW,
+
+    parameter FILTER_DW         = `FILTER_DW,
+    parameter FILTER_AW         = `FILTER_BUFFER_AW,
+
+    parameter PSUM_DW           = `W_PSUM,
+    parameter W_PSUM            = `W_PSUM,
+    parameter PE_IFM_FLAT_BW    = `PE_IFM_FLAT_BW,
+    parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW,
+    parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW
+
 )
 (
     input                          clk, 
@@ -87,71 +105,47 @@ module yolo_engine #(
 );
 `include "define.v"
 
-// parameter BUFF_DEPTH    = 256;
-// parameter BUFF_ADDR_W   = $clog2(BUFF_DEPTH);
-// localparam BIT_TRANS = BUFF_ADDR_W;
 
-parameter DRAM_FILTER_OFFSET = 256 * 256;
-parameter DRAM_BIAS_OFFSET   = DRAM_FILTER_OFFSET + 512 // (# of filters, not real)
-parameter DRAM_SCALE_OFFSET  = DRAM_BIAS_OFFSET + 512   // (# of bias, not real)
+localparam BIT_TRANS = 18;
+
+localparam DRAM_FILTER_OFFSET = 4096;
+localparam DRAM_BIAS_OFFSET   = DRAM_FILTER_OFFSET + 4608; // (# of filters, not real)
+localparam DRAM_SCALE_OFFSET  = DRAM_BIAS_OFFSET + 128;   // (# of bias, not real)
 
 
+
+//================================================================
+// 1) Parse control signals
+//================================================================
 //CSR
 reg ap_start;
 reg ap_ready;
 reg ap_done;
 reg interrupt;
 
-//pe engine
-reg pe_start;
 
 // address
-reg [31:0] dram_base_addr_rd;
-reg [31:0] dram_base_addr_wr;
-reg [31:0] reserved_register;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_rd;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_wr;
+reg [AXI_WIDTH_AD-1:0] reserved_register;
 
-reg [31:0] dram_base_addr_ifm;
-reg [31:0] dram_base_addr_filter;
-reg [31:0] dram_base_addr_bias;
-reg [31:0] dram_base_addr_scale;
-reg [31:0] dram_base_addr_ofm;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_ifm;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_filter;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_bias;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_scale;
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_ofm;
 
+reg  debug_on;
 
-// Signals for dma read  
-wire ctrl_read;
-wire read_done;
-wire [AXI_WIDTH_AD-1:0] read_addr;
-wire [AXI_WIDTH_DA-1:0] read_data;
-wire                    read_data_vld;
-wire [BIT_TRANS   -1:0] read_data_cnt;
-wire ctrl_read_done;
-
-// Signals for dma write
-wire ctrl_write_done;
-wire ctrl_write;
-wire write_done;
-wire indata_req_wr;
-wire [BIT_TRANS   -1:0] write_data_cnt;
-wire [AXI_WIDTH_AD-1:0] write_addr;
-wire [AXI_WIDTH_DA-1:0] write_data;
-
-// FIX ME
-wire[BIT_TRANS   -1:0] num_trans        = 16;           // BURST_LENGTH = 16
-
-//wire[            15:0] max_req_blk_idx  = (256*256)/16; // The number of blocks
-
-//================================================================
-// 1) Control signals
-//================================================================
 always @ (*) begin
-    ap_done     = ctrl_write_done;
+    // ap_done     = ctrl_write_done;
     ap_ready    = 1;
 end
 assign network_done     = interrupt;
 assign network_done_led = interrupt;
 
 
-always @ (posedge clk, negedge rstn) begin
+always @ (posedge clk or negedge rstn) begin
     if(~rstn) begin
         ap_start <= 0;
     end
@@ -163,7 +157,7 @@ always @ (posedge clk, negedge rstn) begin
     end 
 end
 
-always @(posedge clk, negedge rstn) begin
+always @(posedge clk or negedge rstn) begin
     if(~rstn) begin
         interrupt <= 0;
     end
@@ -176,8 +170,9 @@ always @(posedge clk, negedge rstn) begin
 end
 
 // Parse the control registers
-always @ (posedge clk, negedge rstn) begin
+always @ (posedge clk or negedge rstn) begin
     if(~rstn) begin
+        debug_on          <= 0;
         dram_base_addr_rd <= 0;
         dram_base_addr_wr <= 0;
         reserved_register <= 0; // unused 
@@ -200,6 +195,15 @@ always @ (posedge clk, negedge rstn) begin
             dram_base_addr_scale  <= i_ctrl_reg1 + DRAM_SCALE_OFFSET;
             dram_base_addr_ofm    <= i_ctrl_reg2;
 
+            
+            dma_ifm_rd_base_addr    <= i_ctrl_reg1;
+            dma_filter_rd_base_addr <= i_ctrl_reg1 + DRAM_FILTER_OFFSET;
+            dma_bias_rd_base_addr   <= i_ctrl_reg1 + DRAM_BIAS_OFFSET;
+            dma_scale_rd_base_addr  <= i_ctrl_reg1 + DRAM_SCALE_OFFSET;
+
+
+            debug_on <= i_ctrl_reg0[1];
+
         end 
         else if (ap_done) begin 
             dram_base_addr_rd <= 0;
@@ -211,12 +215,21 @@ always @ (posedge clk, negedge rstn) begin
             dram_base_addr_bias   <= 0;
             dram_base_addr_scale  <= 0;
             dram_base_addr_ofm    <= 0;
+
+            debug_on <= 0;
         end 
     end 
 end
 //================================================================
 // 2) tools
 //================================================================
+function [15:0] ceil_div64;
+    input [31:0] nbytes;
+    begin
+        ceil_div64 = (nbytes + 32'd63) >> 6; // (n+63)/64
+    end
+endfunction
+
 
 function [15:0] blk16;
     input [31:0] words;
@@ -275,15 +288,10 @@ function [15:0] w_grp_total; input [3:0] idx; begin
   endcase
 end endfunction
 
-// wire burst_first=read_data_vld&&(blk_read==0)&&(read_data_cnt==0);
-
-
-
 
 //================================================================
 // 3) TOP state machine
 //================================================================
-
 reg [4:0]                   q_layer;        // layer index
 
 // layer informations -> hard coding
@@ -302,31 +310,25 @@ reg                         q_load_bias;
 reg                         q_load_scale;
 
 
+// 관찰용 완료 신호(하위에서 만들어 줘야 함)
+//  - IFM 초기 적재 완료: buffer_manager(or DMA 프론트엔드)에서 발생
+//  - 한 레이어 연산 완료: cnn_ctrl에서 제공 (기존 layer_done 사용)
+//  - OFM 저장 완료: writer(또는 postprocessor→writer)에서 발생
+wire dma_ifm_load_done;    // TODO: buffer_manager에 포트 추가하여 연결
+wire ofm_write_done;   // TODO: OFM writer 모듈 done 신호 연결
+wire layer_done;       // 이미 cnn_ctrl에서 나옴
 
-// pulse
-assign q_load_ifm = phase_ifm & read_data_vld;
-assign q_load_filter = (~phase_ifm) & read_data_vld;
 
-localparam integer IFM_BYTES=256*256*3;
-localparam integer BYTES_PER_BURST=16*(AXI_WIDTH_DA/8); 
-localparam integer IFM_BLOCKS =IFM_BYTES/BYTES_PER_BURST;
 
 // wire [15:0] blk_read;
-
-
-// reg [AXI_WIDTH_AD:0] rd_base_addr_reg;
-reg [15:0] rd_blocks_reg;
-
-
-reg rd_go, wr_go;
-reg [1:0] q_state;
+reg [2:0] q_state;
 
 localparam 
     S_IDLE          = 0, 
     S_LOAD_IFM      = 1, // initial once
     S_SAVE_OFM      = 2, // layer 14, 20
     S_LOAD_CFG      = 3,
-    S_WAIT_CNN_CTRL = 4  // each layer
+    S_WAIT_CNN_CTRL = 4;  // each layer
 
 
 
@@ -337,190 +339,440 @@ localparam
 
 
 always @(posedge clk or negedge rstn) begin
-    if(!rstn) begin
-        phase_ifm        <= 1'b1;
-        q_layer          <= 0;
-        start_d1         <= 0;
-        idx_group        <= 0;
-        // rd_base_addr_reg <= 32'd0;
-        rd_blocks_reg    <= 0;
-        rd_go            <= 0;
+    if (!rstn) begin
         q_state          <= S_IDLE;
+        q_layer          <= 0;
+        q_c_ctrl_start   <= 0;
+
+        // layer info reset...
     end
     else begin
-        rd_go<=1'd0;
-        pe_start<=0;
+        q_c_ctrl_start <= 1'b0; // pulse
 
         case (q_state)
             S_IDLE: begin
                 if (ap_start) begin
-                    // phase_ifm   <= 1;
                     q_layer     <= 0;
-                    idx_group   <= 0;
-                    rd_blocks_reg <= IFM_BLOCKS[15:0];
-
                     q_state <= S_LOAD_CFG;
-                end else begin 
-                    q_state <= S_IDLE;
                 end
             end
-            
-            S_LOAD_IFM: begin
-                // ifm 불러오는 단계
-                // 다 불러온것이 확인되면 q_c_ctrl_start = 1로 바꾸고 (1cycle) WAIT_CNN_CTRL로 전이
-                // q_c_ctrl_start가 굳이 한사이클일 필요는 없음. 대신 계산이 끝나기 전에 다시 0으로 바꿔줄 필요가 있음.
 
-                // if(ctrl_read_done) begin
-                //     phase_ifm<=1'b0;
-                //     q_layer <=4'd0;
-                //     idx_group<=0;
-                //     rd_base_addr_reg<=i_ctrl_reg3 + 4*(w_off_words(4'd0)+w_grp_words(4'd0)*0);
-                //     rd_blocks_reg<=blk16(w_grp_words(4'd0));
-                //     rd_go<=1'b1;
-                //     q_state<=S_WAIT_WG;
-                    
+            // IFM 초기 적재 대기.
+            S_LOAD_IFM: begin
+                if (dma_ifm_load_done) begin
+                    // 첫 레이어 실행 트리거는 다음 상태에서 cfg 로드 후 발생
+                    q_state        <= S_LOAD_CFG;
+                    q_c_ctrl_start <= 1'b1;
+                end
             end            
             
             S_LOAD_CFG: begin
-                // 우선 layer 정보 불러오기 
-                // layer 0면 LOAD_IFM으로 전이
-                // 그 외 layer면 q_c_ctrl_start = 1로 바꾸고 (1cycle) WAIT_CNN_CTRL로 전이
-            end
+                if (debug_on) begin 
+                    // 우선은 여기로만 들어옴.
+                    q_layer         <= 20;
+                    q_width         <= `TEST_COL;       // 16
+                    q_height        <= `TEST_ROW;       // 16
+                    q_channel       <= `TEST_T_CHNIN;   // 16 (4)
+                    q_channel_out   <= `TEST_T_CHNOUT;  // 32 (8) 
+                    q_frame_size    <= `TEST_FRAME_SIZE;
+                    q_row_stride    <= `TEST_COL * `TEST_T_CHNIN;
+                    q_maxpool       <= 0;
 
-            S_WAIT_CNN_CTRL: begin 
-                // c_layer_done 시그널 대기
-                // layer_done -> q_layer 올리고 S_LOAD_CFG로 전이
-            end
-            
+                    q_state <= S_LOAD_IFM;
+                end else begin 
+                    // layer 정보 불러오기 
+                    // a. q_* reg 에 값 할당
+                    // b. dram base addr fix
+                    // layer 0면 LOAD_IFM으로 전이
+                    // 그 외 layer면 q_c_ctrl_start = 1로 바꾸고 (1cycle) WAIT_CNN_CTRL로 전이
+                    // special layer 처리
 
-
-
-            // S_WAIT_WG: begin
-            //     if(ctrl_read_done&&o_load_filter_done) begin
-            //         pe_start<=1'b1;
-            //         s<=S_WAIT_PE;
-            //     end
-            // end
-            
-            // S_WAIT_PE: begin
-            //     if (pe_done) begin
-            //         if (idx_group+1<w_grp_total(q_layer)) begin
-            //             idx_group<=idx_group+1;
-            //             rd_base_addr_reg<=i_ctrl_reg3+4*(w_off_words(q_layer)+w_grp_words(q_layer)*(idx_group+1'b1));
-            //             rd_blocks_reg<=blk16(w_grp_words(q_layer));
-
-            //         end else if (q_layer+1<N_LAYER) begin
-            //             q_layer<=q_layer+1;
-            //             idx_group<=0;
-            //             rd_base_addr_reg<=i_ctrl_reg3+4*(w_off_words(q_layer+1'b1));
-            //             rd_blocks_reg    <= blk16( w_grp_words(q_layer + 1'b1) );
-            //         end else begin
-            //             //
-            //         end
-            //     end
-                
-            // end
-               
-        endcase
-        
-    /*
-        start_d1<=i_ctrl_reg0[0];
-
-        if(start_d1) begin
-            //first layer begin
-            phase_ifm<=1;
-            q_layer<=4'd0;
-            idx_group<=0;
-            rd_base_addr_reg<=i_ctrl_reg1;
-            rd_blocks_reg<=IFM_BLOCKS[15:0];
-
-        end
-        else if(ctrl_read_done) begin
-            if(phase_ifm) begin
-            //ifm ended->weight phase
-            //start form layer0, group0
-                phase_ifm<=1'b0;
-                q_layer <=4'd0;
-                idx_group<=0;
-                rd_base_addr_reg<=i_ctrl_reg3 + 4*(w_off_words(4'd0)+w_grp_words(4'd0)*0);
-                rd_blocks_reg<=blk16(w_grp_words(4'd0));
-            end
-            else begin//wait until the pe engine is done
-                //?���? weight group?�� ???�� 진행
-                if(idx_group+1<w_grp_total(q_layer)) begin
-                    //?�� ?��?��?�� ?��?�� 그룹 
-                    idx_group<=idx_group+1;
-                    rd_base_addr_reg<=i_ctrl_reg3+4*(w_off_words(q_layer)+w_grp_words(q_layer)*(idx_group+1'b1));
-                    rd_blocks_reg<=blk16(w_grp_words(q_layer));
-
-                end else if(q_layer+1<N_LAYER) begin
-                    //?��?�� ?��?��?�� �? 그룹
-                    q_layer<=q_layer+1;
-                    idx_group<=0;
-                    rd_base_addr_reg<=i_ctrl_reg3+4*(w_off_words(q_layer+1'b1));
-                    rd_blocks_reg    <= blk16( w_grp_words(q_layer + 1'b1) );
-                end else begin
-                    //모든 ?��?��?�� ?���? ?��, ?��?�� ?��?��
+                    // 아직 구현할 필요 없음 
                 end
             end
-        end
-    */
+
+            S_SAVE_OFM: begin 
+                // pass
+                // 아직 구현할 필요 없음 
+            end
+
+
+            S_WAIT_CNN_CTRL: begin 
+                if (layer_done) begin 
+                    // bebug end
+                    if (q_layer == 20) begin 
+
+                        q_state <= S_IDLE;
+                        ap_done <= 1;
+                    end
+                    else begin 
+                        // layer_done -> q_layer 올리고 S_LOAD_CFG로 전이
+                        // 아직 구현할 필요 없음
+                    end
+                end
+            end
+
+            default: q_state <= S_IDLE;
+        endcase
     end
 end
 
 
 //================================================================
-// 4) DMA request logic
+// 4) DMA signals
 //================================================================
-// axi_dma_ctrl 에 넣어줄 데이터 만들기!
-
-// 1. ifm 로드
-// q_state == S_LOAD_IFM 일 때 ifm 로드
-
-// 2. filter 로드
-// cnn_ctrl 이 생성하는 csync state에서 filter 로드 시작.
-// q_layer, tout 바탕으로 base address 계산
-// layer info 바탕으로 읽어야할 데이터 개수 계산
-// 그걸 바탕으로 block, trans 계산
-
-// 3. bias, scale 로드
-// cnn_ctrl 이 생성하는 psync state && psync phase == 0 에서 bias와 scale 로드 시작.
+// 우리가 사용할 선들
+wire                 dma_rd_go;                 // read stream start (1cycle)
+wire [31:0]          dma_rd_base_addr;
+wire [BIT_TRANS-1:0] dma_rd_num_trans;
+wire [15:0]          dma_rd_max_req_blk_idx;
+wire                 dma_ctrl_read_done;        // read stream done (1cycle)
 
 
-// 4. ofm write
-// 나중에 생각하기
+wire                 dma_wr_go;
+wire [31:0]          dma_wr_base_addr;
+// write는 아직 미완
 
 
+
+// 연결선
+// Signals for dma read  
+wire                    ctrl_read;
+wire                    read_done;
+wire [AXI_WIDTH_AD-1:0] read_addr;
+wire [AXI_WIDTH_DA-1:0] read_data;
+wire                    read_data_vld;
+wire [BIT_TRANS   -1:0] read_data_cnt;
+
+// Signals for dma write
+wire ctrl_write_done;
+wire ctrl_write;
+wire write_done;
+wire indata_req_wr;
+wire [BIT_TRANS   -1:0] write_data_cnt;
+wire [AXI_WIDTH_AD-1:0] write_addr;
+wire [AXI_WIDTH_DA-1:0] write_data;
+
+
+wire[BIT_TRANS   -1:0] num_trans        = 16;           // BURST_LENGTH = 16
 
 //================================================================
-// 5) 
+// 5) DMA 
 //================================================================
 //----------------------------------------------------------------
-//read, write
+// 5-1) DMA LOAD signal
+//----------------------------------------------------------------
+// stage wire
+// 각 스테이지에서 로드를 "한번"만 진행
+// load affine stage의 경우 bias 로드하고 그 다음에 scale을 로드해야함
+
+// 각 스테이지에 대하여 base_addr을 두어 로드가 완료된 경우 offset을 더해 최신값 유지.
+
+wire in_load_ifm_stage    = (q_state == S_LOAD_IFM);
+wire in_load_filter_stage = (ctrl_csync_run == 1);
+wire in_load_affine_stage = (ctrl_psync_run == 1) && (ctrl_psync_phase == 0);    // bias, scale
+
+reg in_load_ifm_d, in_load_filter_d, in_load_affine_d;
+
+wire in_load_ifm_enter    =  in_load_ifm_stage    & ~in_load_ifm_d;
+wire in_load_ifm_leave    = ~in_load_ifm_stage    &  in_load_ifm_d;
+wire in_load_filter_enter =  in_load_filter_stage & ~in_load_filter_d;
+wire in_load_filter_leave = ~in_load_filter_stage &  in_load_filter_d;
+wire in_load_affine_enter =  in_load_affine_stage & ~in_load_affine_d;
+wire in_load_affine_leave = ~in_load_affine_stage &  in_load_affine_d;
+
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        in_load_ifm_d    <= 1'b0;
+        in_load_filter_d <= 1'b0;
+        in_load_affine_d <= 1'b0;
+    end else begin
+        in_load_ifm_d    <= in_load_ifm_stage;
+        in_load_filter_d <= in_load_filter_stage;
+        in_load_affine_d <= in_load_affine_stage;
+    end
+end
+
+//----------------------------------------------------------------
+// 5-2) DMA LOAD FSM 
+//----------------------------------------------------------------
+localparam 
+    DMA_LOAD_IDLE  = 2'd0,
+    DMA_LOAD_SETUP = 2'd1,
+    DMA_LOAD_KICK  = 2'd2,
+    DMA_LOAD_WAIT  = 2'd3;
+
+reg [1:0] dma_load_state;
+
+// 어떤 대상(IFM/FILTER/BIAS/SCALE)을 로드 중인지
+localparam 
+    SEL_NONE   = 3'd0,
+    SEL_IFM    = 3'd1,
+    SEL_FILTER = 3'd2,
+    SEL_BIAS   = 3'd3,
+    SEL_SCALE  = 3'd4;
+
+reg [2:0] dma_load_cur_sel;
+
+
+reg  in_load_affine_phase;  // 0 -> bias, 1 -> scale
+
+
+// *** 앞선 state machine(top fsm, cnn_ctrl)의 경우 로드가 완료됐다고 바로 state가 변하지 않음.
+// 즉 dma load fsm에서 DMA_LOAD_WAIT가 끝나고 DMA_LOAD_IDLE로 전이했을 떄 여전히 in_load_*_stage가
+// 활성화되어있을 수 있음. 이때 kicked 레지스터로 해당 load가 발행되었는지를 추적해야함.
+// kicked 레지스터는 state가 변경된 경우 적절히 다시 0이 될 필요가 있음. 
+reg  dma_load_kicked;
+
+
+// a. dma_rd_go
+reg dma_load_rd_go_pulse;
+
+// b. dma_rd_base_addr
+reg [31:0]          dma_ifm_rd_base_addr;
+reg [31:0]          dma_filter_rd_base_addr;
+reg [31:0]          dma_bias_rd_base_addr;
+reg [31:0]          dma_scale_rd_base_addr;
+
+
+// c. dma_rd_num_trans
+// reg [BIT_TRANS-1:0] dma_ifm_rd_num_trans;          // = 16 고정
+// num_trans (=고정값 16) 사용
+
+
+// d. dma_rd_max_req_blk_idx
+// total bytes / 64B
+reg [15:0]          dma_rd_max_req_blk_idx_r;  
+// reg [15:0]          dma_ifm_rd_max_req_blk_idx;  
+// reg [15:0]          dma_filter_rd_max_req_blk_idx; 
+// reg [15:0]          dma_bias_rd_max_req_blk_idx; 
+// reg [15:0]          dma_scale_rd_max_req_blk_idx; 
+
+
+
+// e. dma_ctrl_read_done
+reg                         dma_ifm_load_done_reg;
+reg                         dma_filter_load_done_reg;
+reg                         dma_bias_load_done_reg;
+reg                         dma_scale_load_done_reg;
+
+// // top fsm에 올려줄 신호
+assign dma_ifm_load_done = dma_ifm_load_done_reg;
+
+
+// 
+assign dma_rd_go               = dma_load_rd_go_pulse;
+
+assign dma_rd_base_addr        = (dma_load_cur_sel == SEL_IFM)    ? dma_ifm_rd_base_addr
+                               : (dma_load_cur_sel == SEL_FILTER) ? dma_filter_rd_base_addr 
+                               : (dma_load_cur_sel == SEL_BIAS)   ? dma_bias_rd_base_addr
+                               : (dma_load_cur_sel == SEL_SCALE)  ? dma_scale_rd_base_addr
+                               : 0;
+
+assign dma_rd_num_trans        = num_trans;
+
+
+assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
+// assign dma_rd_max_req_blk_idx  = (dma_load_cur_sel == SEL_IFM)    ? dma_ifm_rd_max_req_blk_idx
+//                                : (dma_load_cur_sel == SEL_FILTER) ? dma_filter_rd_max_req_blk_idx
+//                                : (dma_load_cur_sel == SEL_BIAS)   ? dma_bias_rd_max_req_blk_idx
+//                                : (dma_load_cur_sel == SEL_SCALE)  ? dma_scale_rd_max_req_blk_idx
+//                                : 0;
+
+
+// 전체 바이트 
+// item   : formula                         = formula optimize      => # blocks optimized
+//-------------------------------------------------------------------------------------------
+// ifm    : q_frame_size * 4                = q_frame_size << 2     => q_frame_size >> 4        
+// filter : (q_channel << 2) * Tout * 9     = (q_channel << 4) * 9  => (q_channel >> 2) * 9     // input 채널 / 16 * 9
+// bias   : (q_channel_out << 2) * 4        = (q_channel_out << 4)  => (q_channel_out >> 2)     // output 채널 / 16
+// scale  : (q_channel_out << 2) * 4        = (q_channel_out << 4)  => (q_channel_out >> 2)   
+
+// 블록단위로 안떨어지는 경우..
+// 그냥 zero padding
+
+reg  [31:0] dma_load_bytes_total;  
+
+// 블록 수 = 전체 바이트 / 64 (>> 6)
+
+
+
+// -----------------------------------------------------------------------------
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        dma_load_state     <= DMA_LOAD_IDLE;
+        dma_load_cur_sel   <= SEL_NONE;
+        in_load_affine_phase <= 0;
+
+        dma_load_kicked   <= 1'b0;
+        dma_load_rd_go_pulse <= 1'b0;
+
+        // dma_ifm_rd_base_addr    <= 0;
+        // dma_filter_rd_base_addr <= 0;
+        // dma_bias_rd_base_addr   <= 0;
+        // dma_scale_rd_base_addr  <= 0;
+
+        dma_ifm_load_done_reg    <= 0;
+        dma_filter_load_done_reg <= 0;
+        dma_bias_load_done_reg   <= 0;
+        dma_scale_load_done_reg  <= 0;        
+
+    end else begin
+        // defaults (pulse)
+        dma_load_rd_go_pulse <= 1'b0;
+        dma_ifm_load_done_reg    <= 0;
+        dma_filter_load_done_reg <= 0;
+        dma_bias_load_done_reg   <= 0;
+        dma_scale_load_done_reg  <= 0;  
+
+        // 상위가 stage를 떠났으면 FSM 정리
+        if ((in_load_ifm_leave && (dma_load_cur_sel==SEL_IFM)) ||
+            (in_load_filter_leave && (dma_load_cur_sel==SEL_FILTER)) ||
+            (in_load_affine_leave && ((dma_load_cur_sel==SEL_BIAS)||(dma_load_cur_sel==SEL_SCALE)))) begin
+            dma_load_state       <= DMA_LOAD_IDLE;
+            dma_load_cur_sel     <= SEL_NONE;
+            dma_load_kicked      <= 1'b0;
+            in_load_affine_phase <= 0;
+        end
+
+        case (dma_load_state)
+            // ------------------------------------------------
+            DMA_LOAD_IDLE: begin
+                dma_load_cur_sel <= SEL_NONE;
+
+                // 발행 한적 없을 때
+                if (!dma_load_kicked && in_load_ifm_stage) begin
+                    dma_load_cur_sel <= SEL_IFM;
+                    dma_load_state   <= DMA_LOAD_SETUP;
+                end
+                else if (!dma_load_kicked && in_load_filter_stage) begin
+                    dma_load_cur_sel <= SEL_FILTER;
+                    dma_load_state   <= DMA_LOAD_SETUP;
+                end
+                else if (!dma_load_kicked && in_load_affine_stage) begin
+                    dma_load_cur_sel <= SEL_BIAS;
+                    dma_load_state   <= DMA_LOAD_SETUP;
+                end
+            end
+            // ------------------------------------------------
+            // Program base address / block count for the input image
+            DMA_LOAD_SETUP: begin
+
+                case (dma_load_cur_sel)
+                    SEL_IFM: begin
+                        q_load_ifm <= 1;
+                        dma_rd_max_req_blk_idx_r <= ceil_div64(q_frame_size << 2);
+                    end
+                    SEL_FILTER: begin
+                        q_load_filter <= 1;
+                        dma_rd_max_req_blk_idx_r <= ceil_div64((q_channel << 4) * 9);
+                    end
+                    SEL_BIAS: begin
+                        q_load_bias <= 1;
+                        dma_rd_max_req_blk_idx_r <= ceil_div64(q_channel_out << 4);
+                    end
+                    SEL_SCALE: begin
+                        q_load_scale <= 1;
+                        dma_rd_max_req_blk_idx_r <= ceil_div64(q_channel_out << 4);
+                    end
+                    default: begin
+                        dma_rd_max_req_blk_idx_r <= 16'd0;
+                    end
+                endcase
+
+                dma_load_state <= DMA_LOAD_KICK;
+            end
+            // ------------------------------------------------
+            // Fire a single‑cycle start to DMA controller
+            DMA_LOAD_KICK: begin
+                if (!dma_load_kicked) begin
+                    dma_load_rd_go_pulse <= 1'b1; // one-cycle kick
+                    dma_load_kicked  <= 1'b1;
+                end
+                dma_load_state <= DMA_LOAD_WAIT;
+            end
+            // ------------------------------------------------
+            // Wait until DMA finishes issuing and receiving all data
+            DMA_LOAD_WAIT: begin
+                // Option A: strictly wait for both controls
+                if (dma_ctrl_read_done && read_done) begin
+                    case (dma_load_cur_sel)
+                        SEL_IFM: begin
+                            dma_load_state        <= DMA_LOAD_IDLE;
+                            q_load_ifm            <= 1'b0;
+                            dma_ifm_load_done_reg <= 1'b1;
+                        end
+                        SEL_FILTER: begin 
+                            dma_load_state           <= DMA_LOAD_IDLE;
+                            q_load_filter            <= 1'b0;
+                            dma_filter_load_done_reg <= 1'b1;
+
+                            dma_filter_rd_base_addr  <= dma_filter_rd_base_addr + (q_channel << 4) * 9;
+                        end
+                        SEL_BIAS: begin 
+                            dma_load_state         <= DMA_LOAD_SETUP;
+                            dma_load_cur_sel       <= SEL_SCALE;
+                            dma_load_kicked        <= 1'b0;
+                            q_load_bias            <= 1'b0;
+                            dma_bias_load_done_reg <= 1'b1;
+
+                            dma_bias_rd_base_addr  <= dma_bias_rd_base_addr + (q_channel_out << 4);
+                        end
+                        SEL_SCALE: begin
+                            dma_load_state          <= DMA_LOAD_IDLE;
+                            q_load_scale            <= 1'b0;
+                            dma_scale_load_done_reg <= 1'b1;
+
+                            dma_scale_rd_base_addr  <= dma_scale_rd_base_addr + (q_channel_out << 4);
+                        end
+                    endcase
+                end
+            end
+
+            default: dma_load_state <= DMA_LOAD_IDLE;
+        endcase
+    end
+end
+//----------------------------------------------------------------
+// 5-1) DMA write
+//----------------------------------------------------------------
+// ...
+
+
+
+//================================================================
+// 5) dma instance
+//================================================================
+//----------------------------------------------------------------
 axi_dma_ctrl #(.BIT_TRANS(BIT_TRANS))
 u_dma_ctrl(
     .clk              (clk              ),
     .rstn             (rstn             ),
 
-    .i_rd_start       (rd_go            ), //start reading
-    .i_wr_start       (wr_go            ),
-    .i_base_address_rd(rd_base_addr_reg ), /*dram_base_addr_rd*/ //dram read address
-    .i_base_address_wr(dram_base_addr_wr), //dram write address
-    .i_num_trans      (num_trans        ), //transaction needed
-    .i_max_req_blk_idx(rd_blocks_reg    ), /*max_req_blk_idx*/
+    // ----------- READ PLANE -----------
+    .i_rd_start       (dma_rd_go        ),
+    .i_rd_base_addr   (dma_rd_base_addr ), 
+    .i_rd_num_trans   (dma_rd_num_trans ), // transaction needed (사실상 16 고정)
+    .i_rd_max_req_blk_idx(dma_rd_max_req_blk_idx), // 읽을 블록 개수
+    .o_ctrl_read_done (dma_ctrl_read_done),
+
     // DMA Read
     .i_read_done      (read_done        ),
     .o_ctrl_read      (ctrl_read        ), //when to read
     .o_read_addr      (read_addr        ), //where
-    // .o_blk_read(blk_read)
-    // DMA Write
+
+    // ----------- WRITE PLANE ----------
+    .i_wr_start       (dma_wr_go        ),
+    .i_wr_base_addr   (dma_wr_base_addr ), //dram write address
     .i_indata_req_wr  (indata_req_wr    ),
+    .o_ctrl_write_done(ctrl_write_done  ),
+
+    // DMA Write
     .i_write_done     (write_done       ),
     .o_ctrl_write     (ctrl_write       ), //when to write
     .o_write_addr     (write_addr       ),
-    .o_write_data_cnt (write_data_cnt   ),
-    .o_ctrl_write_done(ctrl_write_done  ),
-    .o_ctrl_read_done (ctrl_read_done   )
+    .o_write_data_cnt (write_data_cnt   )
 );
 
 
@@ -539,7 +791,7 @@ u_dma_read(
     //Read address channel
     .M_ARVALID	(M_ARVALID	  ),  // address/control valid handshake
     .M_ARREADY	(M_ARREADY	  ),  // Read addr ready
-    .M_ARADDR	(M_ARADDR	  ),  // Address Read ?��?�� ?��?�� ?��?��?���? 밖으�? 보낸?��
+    .M_ARADDR	(M_ARADDR	  ),  // Address Read
     .M_ARID		(M_ARID		  ),  // Read addr ID
     .M_ARLEN	(M_ARLEN	  ),  // Transfer length
     .M_ARSIZE	(M_ARSIZE	  ),  // Transfer width
@@ -562,8 +814,8 @@ u_dma_read(
      
     //Functional Ports
     .start_dma	(ctrl_read    ),
-    .num_trans	(num_trans    ), //Number of 128-bit words transferred
-    .start_addr	(read_addr    ), //iteration_num * 4 * 16 + read_address_d	
+    .num_trans	(num_trans    ), // Number of 128-bit words transferred
+    .start_addr	(read_addr    ), // iteration_num * 4 * 16 + read_address_d	
     //to bram
     .data_o		(read_data    ),
     .data_vld_o	(read_data_vld),
@@ -630,18 +882,10 @@ u_dma_write(
 //--------------------------------------------------------------------
 // 
 //--------------------------------------------------------------------
-
-// top
-reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
-reg  [4:0]                  q_layer;
-reg                         q_load_ifm;
-reg                         q_load_filter;
+// 연결선
 wire                        load_filter_done;
 
 
-
-
-// 연결선
 // BM <-> PE (IFM/FILTER)
 wire [IFM_DW-1:0]           ifm_data_0, ifm_data_1, ifm_data_2;
 wire                        fb_req;
@@ -653,12 +897,6 @@ wire [FILTER_DW-1:0]        filter_data_0, filter_data_1, filter_data_2, filter_
 wire                     pb_sync_done;
 
 //
-reg  [W_SIZE-1:0]        q_width;
-reg  [W_SIZE-1:0]        q_height;
-reg  [W_CHANNEL-1:0]     q_channel;
-reg  [W_CHANNEL-1:0]     q_channel_out;
-reg  [W_FRAME_SIZE-1:0]  q_frame_size;
-reg                      q_start;
 
 wire                     ctrl_csync_run;
 wire                     ctrl_psync_run;
@@ -678,7 +916,7 @@ wire                     is_last_col;
 wire                     is_first_chn;
 wire                     is_last_chn; 
 
-wire                     layer_done;
+// wire                     layer_done;
 wire                     bm_csync_done;
 wire                     pe_csync_done;
 
@@ -702,7 +940,7 @@ cnn_ctrl u_cnn_ctrl (
     .q_channel         (q_channel         ),
     .q_channel_out     (q_channel_out     ),
     .q_frame_size      (q_frame_size      ),
-    .q_start           (q_start           ),
+    .q_start           (q_c_ctrl_start    ),
     .pb_sync_done      (pb_sync_done      ),
     .bm_csync_done     (bm_csync_done     ),
     .pe_csync_done     (pe_csync_done     ),
@@ -741,10 +979,9 @@ buffer_manager u_buffer_manager (
     .q_load_filter      (q_load_filter    ),
     .o_load_filter_done (load_filter_done ),
 
-    // Buffer Manager <-> AXI (IFM/FILTER) : TB가 구동
+    // Buffer Manager <-> AXI (IFM/FILTER)
     .read_data          (read_data        ),
     .read_data_vld      (read_data_vld    ),
-    // .first              (axi_first        ),
 
     // Buffer Manager <-> Controller 
     .c_ctrl_data_run    (ctrl_data_run    ),

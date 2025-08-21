@@ -7,7 +7,6 @@
 //
 // 2021.09.01 by NXT (truongnx@capp.snu.ac.kr)
 //----------------------------------------------------------------+
-//dram 에서 데이터 읽어옴
 module axi_dma_rd(
     //AXI Master Interface
     //Read address channel
@@ -35,13 +34,13 @@ module axi_dma_rd(
     M_RRESP,      // Read response
      
     //Functional Ports
-    start_dma,//전송 시작 트리거 
-    num_trans, //Number of 32-bit words transferred(burst)
-    start_addr,//데이터 읽을 위치 시작점-> burst 만틈 읽기
-    data_o,//읽은 데이터 
-    data_vld_o,//유효할 때 high
-    data_cnt_o,//데이터 개수
-    done_o,//완료 시 high
+    start_dma,  // 전송 시작 트리거 
+    num_trans,  // Number of 32-bit words transferred(burst)
+    start_addr, // 데이터 읽을 위치 시작점-> burst 만틈 읽기
+    data_o,     // 읽은 데이터 
+    data_vld_o, // 유효할 때 high
+    data_cnt_o, // 데이터 개수
+    done_o,     // 완료 시 high
 
     //Global signals
     clk, rstn
@@ -161,7 +160,6 @@ module axi_dma_rd(
 // Main body of code
 //------------------------------------------------------------------------------
    //FSM for Read from AXI
-
     localparam RD_IDLE = 0, RD_PRE = 1, RD_START = 2, RD_SEQ = 3, RD_WAIT = 4;
 
     always @(posedge clk or negedge rstn)
@@ -197,7 +195,6 @@ module axi_dma_rd(
          
         // end
         else if(q_burst_cnt_rd + FIXED_BURST_SIZE > num_trans_d) begin
-            //burst개수가 총량 초과?
             q_burst_size_rd <= num_trans_d[LOG_BURST_SIZE - 1 :0] - 1;
             q_burst_size_rd_1 <= num_trans_d[LOG_BURST_SIZE - 1 :0];    //The # of remaining transaction
             if(st_rdaxi == RD_SEQ) last_trans <= 1'b1;
