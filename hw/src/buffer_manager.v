@@ -42,25 +42,21 @@ module buffer_manager #(
     input  wire [W_CHANNEL-1:0]     q_channel,   // TILED input channel
     input  wire [W_SIZE+W_CHANNEL-1:0] q_row_stride, // q_width * q_channel
 
-    input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용
+    input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용 ?
 
     input  wire                     q_load_ifm,             // ifm load start
-    // output wire                     o_load_ifm_done,     // ifm load done
 
-    // input  wire [W_CHANNEL-1:0]     q_outchn,               // output channel 인덱스
     input  wire                     q_load_filter,          // filter 로드 시작 시그널
     output wire                     o_load_filter_done,     // filter 로드 완료 시그널
 
-    input  wire                     q_fm_buf_switch,        // ofm <-> ifm switch
+
+    input  wire                     q_fm_buf_switch,        // ofm <-> ifm switch/ ctrl 한테 받으면 좋을듯
 
 
     // Buffer Manager <-> AXI
     input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
     input  wire                     read_data_vld,  // whether valid
     // input  wire                     first,          // not use
-
-
-    //
 
     // Buffer Manager <-> Controller 
     input  wire                         c_ctrl_data_run,
@@ -159,6 +155,7 @@ wire c_is_last_chn_d   = control_pipe[BM_DELAY-1][IS_LAST_CHN];
 // I. FEATURE MAP BUFFER & AXI
 //============================================================================
 // ifm buf & ofm buf ping-pong
+// ****Never reset when the layer changes
 localparam  IFM = 1'b0,
             OFM = 1'b1;
 
@@ -485,7 +482,7 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 //----------------------------------------------------------------------------
-// III-2) row buffer prefill state machine (csync) FIXME
+// III-2) row buffer prefill state machine (csync)
 //----------------------------------------------------------------------------
 reg                 pf_run;     // prefill active
 reg                 pf_done;    // prefill done
