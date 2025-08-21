@@ -5,5 +5,7 @@
     "cin": 32,
     "cout": 64,
     "ifm_hex":    "tools\\data\\CONV04_input_32b.hex",
-    "filter_hex": "tools\\data\\CONV04_param_weight.hex"
+    "filter_hex": "tools\\data\\CONV04_param_weight.hex",
+    "bias_hex":   "tools\\data\\CONV04_param_biases.hex",
+    "scale_hex":  "tools\\data\\CONV04_param_scales.hex"
 }

@@ -19,13 +19,17 @@ class TCParams:
     cout: int
     ifm_hex: Path
     filter_hex: Path
+    bias_hex: Path
+    scale_hex: Path
 
     out_feamap_dir: Path
     out_param_packed_dir: Path
     out_expect_dir: Path
     out_ifm_hex: Path
     out_weight_hex: Path
+    out_affine_hex: Path
     out_golden_hex: Path
+    
 
 
 def _require_pos_int(cfg: dict[str, Any], key: str) -> int:
@@ -68,11 +72,17 @@ def load_params(args_path: Path) -> TCParams:
 
     ifm      = _require_str_path(cfg, "ifm_hex")
     filter_p = _require_str_path(cfg, "filter_hex")
+    bias_p    = _require_str_path(cfg, "bias_hex")
+    scale_p   = _require_str_path(cfg, "scale_hex")
 
     if not ifm.is_file():
         raise FileNotFoundError(f"IFM hex not found: {ifm}")
     if not filter_p.is_file():
         raise FileNotFoundError(f"FILTER hex not found: {filter_p}")
+    if not bias_p.is_file():
+        raise FileNotFoundError(f"BIAS hex not found: {bias_p}")
+    if not scale_p.is_file():
+        raise FileNotFoundError(f"SCALE hex not found: {scale_p}")
 
     out_feamap_dir       = _abs_path(Path("hw") / "inout_data" / "feamap")
     out_param_packed_dir = _abs_path(Path("hw") / "inout_data" / "param_packed")
@@ -85,16 +95,19 @@ def load_params(args_path: Path) -> TCParams:
     out_ifm_hex    = out_feamap_dir       / f"test{tc_no}_input_32b.hex"
     out_weight_hex = out_param_packed_dir / f"test{tc_no}_param_packed_weight.hex"
     out_golden_hex = out_expect_dir       / f"test{tc_no}_output_32b.hex"
+    out_affine_hex = out_param_packed_dir / f"test{tc_no}_affine_param.hex"
 
     return TCParams(
         testcase_no=tc_no,
         width=w, height=h, cin=cin, cout=cout,
         ifm_hex=ifm, filter_hex=filter_p,
+        bias_hex=bias_p, scale_hex=scale_p,
         out_feamap_dir=out_feamap_dir,
         out_param_packed_dir=out_param_packed_dir,
         out_expect_dir=out_expect_dir,
         out_ifm_hex=out_ifm_hex,
         out_weight_hex=out_weight_hex,
+        out_affine_hex=out_affine_hex,
         out_golden_hex=out_golden_hex,
     )
 
@@ -121,6 +134,8 @@ def _count_required_ifm_lines(width: int, height: int, cin: int) -> int:
 def _count_required_filter_lines(cin: int, cout: int) -> int:
     return cout * cin * (KERNEL_SIZE * KERNEL_SIZE)
 
+def _count_required_affine_lines(cout: int) -> int:
+    return cout
 
 # ------------------------------
 # 검증 루틴
@@ -131,14 +146,21 @@ def verify_inputs(params: TCParams) -> None:
     
     ifm_lines = _read_hex_lines(params.ifm_hex)
     filt_lines = _read_hex_lines(params.filter_hex)
+    bias_lines  = _read_hex_lines(params.bias_hex)
+    scale_lines = _read_hex_lines(params.scale_hex)
 
     need_ifm = _count_required_ifm_lines(params.width, params.height, params.cin)
     need_flt = _count_required_filter_lines(params.cin, params.cout)
+    need_aff = _count_required_affine_lines(params.cout)
 
     if len(ifm_lines) < need_ifm:
         raise ValueError(f"IFM data not enough: have={len(ifm_lines)} need={need_ifm}")
     if len(filt_lines) < need_flt:
         raise ValueError(f"FILTER data not enough: have={len(filt_lines)} need={need_flt}")
+    if len(bias_lines) < need_aff:
+        raise ValueError(f"BIAS data not enough: have={len(bias_lines)} need={need_aff}")
+    if len(scale_lines) < need_aff:
+        raise ValueError(f"SCALE data not enough: have={len(scale_lines)} need={need_aff}")
 
 
 
@@ -192,6 +214,20 @@ def pack_weight_for_hw(params: TCParams, out32_path: Path) -> None:
                     packed32 = f"{b[3]}{b[2]}{b[1]}{b[0]}"
                     fw.write(packed32.lower() + "\n")
 
+# ------------------------------
+# AFFINE 패킹 (bias + scale)
+# ------------------------------
+def pack_affine_for_hw(params: TCParams) -> None:
+    bias_lines  = _read_hex_lines(params.bias_hex)[:params.cout]
+    scale_lines = _read_hex_lines(params.scale_hex)[:params.cout]
+
+    params.out_param_packed_dir.mkdir(parents=True, exist_ok=True)
+    with params.out_affine_hex.open("w", encoding="utf-8") as fw:
+        for c in range(params.cout):
+            fw.write(bias_lines[c].lower() + "\n")
+        for c in range(params.cout):
+            fw.write(scale_lines[c].lower() + "\n")
+
 
 # ------------------------------
 # IFM 복사
@@ -223,8 +259,11 @@ def main(argv: list[str]) -> None:
     print(f" tc_no={params.testcase_no} width={params.width} height={params.height} cin={params.cin} cout={params.cout}")
     print(f" ifm_hex={params.ifm_hex}")
     print(f" filter_hex={params.filter_hex}")
+    print(f" bias_hex={params.bias_hex}")
+    print(f" scale_hex={params.scale_hex}")
     print(f" out_ifm_hex={params.out_ifm_hex}")
     print(f" out_weight_hex={params.out_weight_hex}")
+    print(f" out_affine_hex={params.out_affine_hex}")
     print(f" out_golden_hex={params.out_golden_hex}")
     
     
@@ -246,6 +285,10 @@ def main(argv: list[str]) -> None:
 
     pack_weight_for_hw(params, params.out_weight_hex)
     print(f"[OK] weight packed for HW (32b) -> {params.out_weight_hex}")
+    
+    # 4) AFFINE 패킹 (bias+scale)
+    pack_affine_for_hw(params)
+    print(f"[OK] affine packed (bias+scale) -> {params.out_affine_hex}")
 
     run_conv(
         ifm_path=params.out_ifm_hex,
