@@ -5,8 +5,8 @@
 
 // select test case
 // `define TESTCASE_0 1
-`define TESTCASE_1 1
-// `define TESTCASE_2 1
+// `define TESTCASE_1 1
+`define TESTCASE_2 1
 
 
 `ifdef TESTCASE_3
@@ -25,6 +25,7 @@
         `define TEST_CHNOUT      64
         `define TEST_IFM_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test2_input_32b.hex"
         `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test2_param_packed_weight.hex"
+        `define TEST_AFFINE_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test2_affine_param.hex"
         `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test2_output_32b.hex"
     `else
         `ifdef TESTCASE_1

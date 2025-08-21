@@ -4,7 +4,7 @@
 
 module top_tb;
     //----------------------------------------------------------------------  
-    // 1) 파라미터: controller_params.vh에서 import
+    // 1) Parameter
     //----------------------------------------------------------------------  
     parameter W_SIZE        = `W_SIZE;
     parameter W_CHANNEL     = `W_CHANNEL;
@@ -31,7 +31,6 @@ module top_tb;
     localparam CLK_PERIOD   = 10; // 100 MHz
 
 
-
     parameter TEST_ROW         = `TEST_ROW;
     parameter TEST_COL         = `TEST_COL;
     parameter TEST_CHNIN       = `TEST_CHNIN;    
@@ -43,7 +42,7 @@ module top_tb;
     
 
     //----------------------------------------------------------------------  
-    // 2) 신호 선언
+    // 2) Signals
     //----------------------------------------------------------------------  
     reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
     reg  [4:0]                  q_layer;
@@ -187,7 +186,6 @@ module top_tb;
         // Buffer Manager <-> AXI (IFM/FILTER) : TB가 구동
         .read_data          (axi_read_data    ),
         .read_data_vld      (axi_read_data_vld),
-        // .first              (axi_first        ),
 
         // Buffer Manager <-> Controller 
         .c_ctrl_data_run    (ctrl_data_run    ),
@@ -212,8 +210,8 @@ module top_tb;
 
         // Buffer Manager <-> pe_engine (FILTER)
         .fb_req_possible    (fb_req_possible  ),
-        .fb_req             (fb_req           ), // from PE
-        .fb_addr            (fb_addr          ), // from PE
+        .fb_req             (fb_req           ),
+        .fb_addr            (fb_addr          ),
 
         .fb_data0_out       (filter_data_0    ),
         .fb_data1_out       (filter_data_1    ),
@@ -579,22 +577,6 @@ module top_tb;
             tb_load_filters_in_csync(t);
         end
     end
-
-    // psum buf (pb_sync_done signal)
-    // TODO: reflect psync_phase 
-    // reg r_pb_sync_done;
-    // initial begin
-    //     r_pb_sync_done = 0;
-
-    //     wait (ctrl_psync_run == 1'b1 && ctrl_psync_phase == 1'b1);
-     
-    //     repeat (1000) @(posedge clk);
-    //     @(posedge clk) r_pb_sync_done = 1'b1;
-    //     @(posedge clk) r_pb_sync_done = 1'b0;
-    // end
-    // assign pb_sync_done = r_pb_sync_done;
-
-
     //--------------------------------------------------------------------------
     // 10) Initialize dram & compare output
     //--------------------------------------------------------------------------
