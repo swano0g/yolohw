@@ -1,7 +1,6 @@
 `timescale 1ns / 1ps
 `include "controller_params.vh"
 
-`define FPGA 1
 module dpram_wrapper  #(
     parameter integer DW      = 32,       // data bit-width per word
     parameter integer AW      = 16,       // address bit-width → 2^16 = 65 536 words
@@ -93,6 +92,22 @@ reg	[DW-1			:	0]		rdata;
 		// affine buffer
 		else if((DEPTH == 512) && (DW == 32)) begin: gen_dpram_512x32
 			dpram_512x32 u_dpram_512x32 (
+				// write ports
+				.clka    (clk),
+				.ena     (ena),
+				.wea     (wea),
+				.addra   (addra),
+				.dina    (dia),
+				// read ports 
+				.clkb    (clk),
+				.enb     (enb),
+				.addrb   (addrb),
+				.doutb   (dob)
+			);
+	    end
+		// psum row buffer
+		else if((DEPTH == 256) && (DW == 32)) begin: gen_dpram_256x32
+			dpram_256x32 u_dpram_256x32 (
 				// write ports
 				.clka    (clk),
 				.ena     (ena),
