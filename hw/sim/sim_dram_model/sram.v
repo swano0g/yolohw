@@ -68,30 +68,41 @@ module sram (
   end
 
 
-  // synchr. write of memory:
-  always @(posedge clk)
-  begin: PROC_SimmemWrite
-    if (ena == 1'b1)
-    begin
-      mem[addr] <= wdata;
-    end
-  end
+  // // synchr. write of memory:
+  // always @(posedge clk)
+  // begin: PROC_SimmemWrite
+  //   if (ena == 1'b1)
+  //   begin
+  //     mem[addr] <= wdata;
+  //   end
+  // end
 
-  // ouput assignments:
-  assign  tmp_rdata = mem[addr];
+  // // ouput assignments:
+  // assign  tmp_rdata = mem[addr];
 
-  //for synchronous memory output
-  always  @(posedge clk)
-  begin
-     rdata = tmp_rdata;
-  end
+  // //for synchronous memory output
+  // always  @(posedge clk)
+  // begin
+  //    rdata = tmp_rdata;
+  // end
 
-  //asynchronous reset 
-  always @(intrst)
-  begin
-   if (intrst == 1'b0)
-    begin
-     rdata = 0;
+  // //asynchronous reset 
+  // always @(intrst)
+  // begin
+  //  if (intrst == 1'b0)
+  //   begin
+  //    rdata = 0;
+  //   end
+  // end
+
+
+  always @(posedge clk or negedge rst) begin
+    if (!rst) begin
+      rdata  <= 0;
+    end else begin
+      if (ena) mem[addr] <= wdata;
+
+      rdata  <= mem[addr];
     end
   end
 

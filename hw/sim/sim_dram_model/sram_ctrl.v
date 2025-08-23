@@ -1,7 +1,7 @@
 //----------------------------------------------------------------+
 //----------------------------------------------------------------+
 // Project: Deep Learning Hardware Design Contest
-// Module: sram.v
+// Module: sram_ctrl.v
 // Description:
 //				Translate AXI commands to access native SRAMs
 //				Bug!!! when there is rdfifo_full
