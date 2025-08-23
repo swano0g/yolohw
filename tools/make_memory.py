@@ -28,6 +28,7 @@ class TCParams:
     out_ifm_hex: Path
     out_weight_hex: Path
     out_memory_hex: Path
+    out_memory16_hex: Path
 
 
 def _abs_path(p: Path) -> Path:
@@ -78,6 +79,7 @@ def load_params(args_path: Path) -> TCParams:
     out_ifm_hex    = out_feamap_dir       / f"test{tc_no}_input_32b.hex"
     out_weight_hex = out_param_packed_dir / f"test{tc_no}_param_packed_weight.hex"
     out_memory_hex = out_dram_dir         / f"test{tc_no}_memory.hex"
+    out_memory16_hex = out_dram_dir        / f"test{tc_no}_memory_16b.hex"
 
     return TCParams(
         testcase_no=tc_no,
@@ -92,6 +94,7 @@ def load_params(args_path: Path) -> TCParams:
         out_ifm_hex=out_ifm_hex,
         out_weight_hex=out_weight_hex,
         out_memory_hex=out_memory_hex,
+        out_memory16_hex=out_memory16_hex,
     )
 
 # =========================================
@@ -140,6 +143,28 @@ def _pad_to_mult16(lines: List[str]) -> Tuple[List[str], int]:
 
 def _select_if_exists(primary: Path, fallback: Path) -> Path:
     return primary if primary.is_file() else fallback
+
+
+def _split32_to_16_lines(lines32: List[str]) -> List[str]:
+    """
+    32b 문자열 리스트를 16b 문자열 리스트로 분할.
+    hi_lo=True : [상위16, 하위16]
+    hi_lo=False: [하위16, 상위16]
+    모든 결과는 4자리 소문자 hex로 zero-padding.
+    """
+    out16: List[str] = []
+    for s in lines32:
+        v = int(s, 16) & 0xFFFFFFFF
+        hi = (v >> 16) & 0xFFFF
+        lo = v & 0xFFFF
+        # if hi_lo:
+        #     out16.append(f"{hi:04x}")
+        #     out16.append(f"{lo:04x}")
+        # else:
+        out16.append(f"{lo:04x}")
+        out16.append(f"{hi:04x}")
+        
+    return out16
 
 # =========================================
 # Build memory image
@@ -209,6 +234,13 @@ def build_memory(params: TCParams) -> dict:
             fw.write(s + "\n")
         for s in scale_lines:
             fw.write(s + "\n")
+            
+    # 16b 파일 생성: 위에서 쓴 32b 라인들의 "정확히 같은 순서"를 유지하며 분할
+    all32_lines = ifm_lines + filt_lines + bias_lines + scale_lines
+    all16_lines = _split32_to_16_lines(all32_lines)
+    with params.out_memory16_hex.open("w", encoding="utf-8") as fw16:
+        for s16 in all16_lines:
+            fw16.write(s16 + "\n")
 
     return {
         "memory_path": str(params.out_memory_hex),
@@ -216,7 +248,8 @@ def build_memory(params: TCParams) -> dict:
         "filter": start_flt,
         "bias": start_bias,
         "scale": start_scale,
-        "total_lines": len(ifm_lines) + len(filt_lines) + len(bias_lines) + len(scale_lines),
+        "total_lines": len(all32_lines),
+        "total_lines_16b": len(all16_lines),
     }
 
 # =========================================
