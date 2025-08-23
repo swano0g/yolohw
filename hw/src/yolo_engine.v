@@ -1,3 +1,4 @@
+`include "define.v"
 `include "controller_params.vh"
 
 //----------------------------------------------------------------+
@@ -53,68 +54,66 @@ module yolo_engine #(
 
 )
 (
-    input                          clk, 
-    input                          rstn,
+    input                           clk, 
+    input                           rstn,
 
-    input [31:0] i_ctrl_reg0,    // network_start, // {debug_big(1), debug_buf_select(16), debug_buf_addr(9)}
-    input [31:0] i_ctrl_reg1,    // Read address base -> ifm, filter, bias, scale
-    input [31:0] i_ctrl_reg2,    // Write address base -> ofm
-    input [31:0] i_ctrl_reg3,    // Write address base
+    input [31:0]                    i_ctrl_reg0,    // network_start, // {debug_big(1), debug_buf_select(16), debug_buf_addr(9)}
+    input [31:0]                    i_ctrl_reg1,    // Read address base -> ifm, filter, bias, scale
+    input [31:0]                    i_ctrl_reg2,    // Write address base -> ofm
+    input [31:0]                    i_ctrl_reg3,    // Write address base
 
-    output                         M_ARVALID,
-    input                          M_ARREADY,
-    output  [AXI_WIDTH_AD-1:0]     M_ARADDR,
-    output  [AXI_WIDTH_ID-1:0]     M_ARID,
-    output  [7:0]                  M_ARLEN,
-    output  [2:0]                  M_ARSIZE,
-    output  [1:0]                  M_ARBURST,
-    output  [1:0]                  M_ARLOCK,
-    output  [3:0]                  M_ARCACHE,
-    output  [2:0]                  M_ARPROT,
-    output  [3:0]                  M_ARQOS,
-    output  [3:0]                  M_ARREGION,
-    output  [3:0]                  M_ARUSER,
-    input                          M_RVALID,
-    output                         M_RREADY,
-    input  [AXI_WIDTH_DA-1:0]      M_RDATA,
-    input                          M_RLAST,
-    input  [AXI_WIDTH_ID-1:0]      M_RID,
-    input  [3:0]                   M_RUSER,
-    input  [1:0]                   M_RRESP,
+    output                          M_ARVALID,
+    input                           M_ARREADY,
+    output  [AXI_WIDTH_AD-1:0]      M_ARADDR,
+    output  [AXI_WIDTH_ID-1:0]      M_ARID,
+    output  [7:0]                   M_ARLEN,
+    output  [2:0]                   M_ARSIZE,
+    output  [1:0]                   M_ARBURST,
+    output  [1:0]                   M_ARLOCK,
+    output  [3:0]                   M_ARCACHE,
+    output  [2:0]                   M_ARPROT,
+    output  [3:0]                   M_ARQOS,
+    output  [3:0]                   M_ARREGION,
+    output  [3:0]                   M_ARUSER,
+    input                           M_RVALID,
+    output                          M_RREADY,
+    input  [AXI_WIDTH_DA-1:0]       M_RDATA,
+    input                           M_RLAST,
+    input  [AXI_WIDTH_ID-1:0]       M_RID,
+    input  [3:0]                    M_RUSER,
+    input  [1:0]                    M_RRESP,
 
-    output                         M_AWVALID,
-    input                          M_AWREADY,
-    output  [AXI_WIDTH_AD-1:0]     M_AWADDR,
-    output  [AXI_WIDTH_ID-1:0]     M_AWID,
-    output  [7:0]                  M_AWLEN,
-    output  [2:0]                  M_AWSIZE,
-    output  [1:0]                  M_AWBURST,
-    output  [1:0]                  M_AWLOCK,
-    output  [3:0]                  M_AWCACHE,
-    output  [2:0]                  M_AWPROT,
-    output  [3:0]                  M_AWQOS,
-    output  [3:0]                  M_AWREGION,
-    output  [3:0]                  M_AWUSER,
+    output                          M_AWVALID,
+    input                           M_AWREADY,
+    output  [AXI_WIDTH_AD-1:0]      M_AWADDR,
+    output  [AXI_WIDTH_ID-1:0]      M_AWID,
+    output  [7:0]                   M_AWLEN,
+    output  [2:0]                   M_AWSIZE,
+    output  [1:0]                   M_AWBURST,
+    output  [1:0]                   M_AWLOCK,
+    output  [3:0]                   M_AWCACHE,
+    output  [2:0]                   M_AWPROT,
+    output  [3:0]                   M_AWQOS,
+    output  [3:0]                   M_AWREGION,
+    output  [3:0]                   M_AWUSER,
     
-    output                         M_WVALID, 
-    input                          M_WREADY, 
-    output  [AXI_WIDTH_DA-1:0]     M_WDATA, 
-    output  [AXI_WIDTH_DS-1:0]     M_WSTRB, 
-    output                         M_WLAST, 
-    output  [AXI_WIDTH_ID-1:0]     M_WID, 
-    output  [3:0]                  M_WUSER,
+    output                          M_WVALID, 
+    input                           M_WREADY, 
+    output  [AXI_WIDTH_DA-1:0]      M_WDATA, 
+    output  [AXI_WIDTH_DS-1:0]      M_WSTRB, 
+    output                          M_WLAST, 
+    output  [AXI_WIDTH_ID-1:0]      M_WID, 
+    output  [3:0]                   M_WUSER,
     
-    input                          M_BVALID,
-    output                         M_BREADY,
-    input  [1:0]                   M_BRESP,
-    input  [AXI_WIDTH_ID-1:0]      M_BID,
-    input                          M_BUSER,
+    input                           M_BVALID,
+    output                          M_BREADY,
+    input  [1:0]                    M_BRESP,
+    input  [AXI_WIDTH_ID-1:0]       M_BID,
+    input                           M_BUSER,
     
-    output network_done,
-    output network_done_led   
+    output                          network_done,
+    output                          network_done_led  
 );
-`include "define.v"
-
 
 localparam BIT_TRANS = 18;
 
@@ -998,7 +997,7 @@ buffer_manager u_buffer_manager (
     .q_channel          (q_channel        ),
     .q_row_stride       (q_row_stride     ),
 
-    .q_layer            (q_layer          ),
+    // .q_layer            (q_layer          ),
 
     .q_load_ifm         (q_load_ifm       ),
     .q_load_filter      (q_load_filter    ),
@@ -1041,89 +1040,89 @@ buffer_manager u_buffer_manager (
 );
 //---------------------------------------------------------------------- 
 pe_engine u_pe_engine (
-    .clk(clk), 
-    .rstn(rstn),
-    .c_ctrl_data_run(ctrl_data_run),
-    .c_ctrl_csync_run(ctrl_csync_run),
-    .c_row(row),
-    .c_col(col),
-    .c_chn(chn),
-    .c_chn_out(chn_out),
-    .c_is_first_row(is_first_row),
-    .c_is_last_row (is_last_row),
-    .c_is_first_col(is_first_col),
-    .c_is_last_col (is_last_col),
-    .c_is_first_chn(is_first_chn),
-    .c_is_last_chn (is_last_chn),
+    .clk                (clk            ), 
+    .rstn               (rstn           ),
+    .c_ctrl_data_run    (ctrl_data_run  ),
+    .c_ctrl_csync_run   (ctrl_csync_run ),
+    .c_row              (row            ),
+    .c_col              (col            ),
+    .c_chn              (chn            ),
+    .c_chn_out          (chn_out        ),
+    .c_is_first_row     (is_first_row   ),
+    .c_is_last_row      (is_last_row    ),
+    .c_is_first_col     (is_first_col   ),
+    .c_is_last_col      (is_last_col    ),
+    .c_is_first_chn     (is_first_chn   ),
+    .c_is_last_chn      (is_last_chn    ),
 
-    .q_channel(q_channel),
+    .q_channel          (q_channel      ),
 
-    .o_pe_csync_done(pe_csync_done),
+    .o_pe_csync_done    (pe_csync_done  ),
     
-    .ib_data0_in(ifm_data_0), 
-    .ib_data1_in(ifm_data_1), 
-    .ib_data2_in(ifm_data_2),
+    .ib_data0_in        (ifm_data_0     ), 
+    .ib_data1_in        (ifm_data_1     ), 
+    .ib_data2_in        (ifm_data_2     ),
     
-    .fb_req_possible(fb_req_possible),
-    .o_fb_req(fb_req),
-    .o_fb_addr(fb_addr),
+    .fb_req_possible    (fb_req_possible),
+    .o_fb_req           (fb_req         ),
+    .o_fb_addr          (fb_addr        ),
 
-    .fb_data0_in(filter_data_0),
-    .fb_data1_in(filter_data_1),
-    .fb_data2_in(filter_data_2),
-    .fb_data3_in(filter_data_3),
+    .fb_data0_in        (filter_data_0  ),
+    .fb_data1_in        (filter_data_1  ),
+    .fb_data2_in        (filter_data_2  ),
+    .fb_data3_in        (filter_data_3  ),
 
     // pe_engine -> postprocessor
-    .o_pe_data(pe_data),
-    .o_pe_vld(pe_vld), 
-    .o_pe_row(pe_row),
-    .o_pe_col(pe_col),
-    .o_pe_chn(pe_chn),
-    .o_pe_chn_out(pe_chn_out),
-    .o_pe_is_last_chn(pe_is_last_chn) 
+    .o_pe_data          (pe_data        ),
+    .o_pe_vld           (pe_vld         ), 
+    .o_pe_row           (pe_row         ),
+    .o_pe_col           (pe_col         ),
+    .o_pe_chn           (pe_chn         ),
+    .o_pe_chn_out       (pe_chn_out     ),
+    .o_pe_is_last_chn   (pe_is_last_chn ) 
 );
 //----------------------------------------------------------------------  
 postprocessor u_postprocessor (
-    .clk(clk),
-    .rstn(rstn),
+    .clk                (clk            ),
+    .rstn               (rstn           ),
 
     // postprocessor <-> top
-    .q_layer(q_layer),
-    
-    .q_width(q_width),
-    .q_height(q_height),
-    .q_channel(q_channel),    
-    .q_channel_out(q_channel_out),
+    .q_width            (q_width        ),
+    .q_height           (q_height       ),
+    .q_channel          (q_channel      ),
+    .q_channel_out      (q_channel_out  ),
 
-    .q_load_bias(q_load_bias),
-    .q_load_scale(q_load_scale),
+    .q_load_bias        (q_load_bias    ),
+    .q_load_scale       (q_load_scale   ),
 
     // postprocessor <-> ctrl
-    .c_ctrl_csync_run(ctrl_csync_run),
-    .c_ctrl_psync_run(ctrl_psync_run),
-    .c_ctrl_psync_phase(ctrl_psync_phase),
+    .c_ctrl_csync_run   (ctrl_csync_run ),
+    .c_ctrl_psync_run   (ctrl_psync_run ),
+    .c_ctrl_psync_phase (ctrl_psync_phase),
+
+    .c_ctrl_chn_out     (chn_out        ),
 
 
-    .o_pp_load_done(pp_load_done),
-    .o_pb_sync_done(pb_sync_done),
+    .o_pp_load_done     (pp_load_done   ),
+    .o_pb_sync_done     (pb_sync_done   ),
 
     // postprocessor <-> AXI
-    .read_data(read_data),
-    .read_data_vld(read_data_vld),
+    .read_data          (read_data      ),
+    .read_data_vld      (read_data_vld  ),
 
     // postprocessor <-> pe_engine
-    .pe_data_i(pe_data),
-    .pe_vld_i(pe_vld), 
-    .pe_row_i(pe_row),
-    .pe_col_i(pe_col),
-    .pe_chn_i(pe_chn),
-    .pe_chn_out_i(pe_chn_out),
-    .pe_is_last_chn(pe_is_last_chn), 
+    .pe_data_i          (pe_data        ),
+    .pe_vld_i           (pe_vld         ), 
+    .pe_row_i           (pe_row         ),
+    .pe_col_i           (pe_col         ),
+    .pe_chn_i           (pe_chn         ),
+    .pe_chn_out_i       (pe_chn_out     ),
+    .pe_is_last_chn     (pe_is_last_chn ), 
 
     // postprocessor <-> buffer_manager
-    .o_pp_data_vld(),
-    .o_pp_data(),
-    .o_pp_addr()
+    .o_pp_data_vld      (       ),
+    .o_pp_data          (       ),
+    .o_pp_addr          (       )
 );
 
 

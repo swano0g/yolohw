@@ -74,6 +74,7 @@ module pe_engine #(
     output wire [W_SIZE-1:0]            o_pe_col,
     output wire [W_CHANNEL-1:0]         o_pe_chn,
     output wire [W_CHANNEL-1:0]         o_pe_chn_out,
+    output wire                         o_pe_is_first_chn,
     output wire                         o_pe_is_last_chn 
 
 );
@@ -268,15 +269,16 @@ assign o_pe_csync_done = filter_loaded & c_ctrl_csync_run;
 
 // 4. outputs to postprocessor
 wire [PE_ACCO_FLAT_BW-1:0] acc_flat;
-wire                   vld;
+wire                       vld;
 
-assign o_pe_data        = acc_flat;
-assign o_pe_vld         = vld;
-assign o_pe_row         = row_pipe[STG-1];
-assign o_pe_col         = col_pipe[STG-1];
-assign o_pe_chn         = chn_pipe[STG-1];
-assign o_pe_chn_out     = chn_out_pipe[STG-1];
-assign o_pe_is_last_chn = chn_location_pipe[STG-1][1];
+assign o_pe_data         = acc_flat;
+assign o_pe_vld          = vld;
+assign o_pe_row          = row_pipe[STG-1];
+assign o_pe_col          = col_pipe[STG-1];
+assign o_pe_chn          = chn_pipe[STG-1];
+assign o_pe_chn_out      = chn_out_pipe[STG-1];
+assign o_pe_is_first_chn = chn_location_pipe[STG-1][0];
+assign o_pe_is_last_chn  = chn_location_pipe[STG-1][1];
 
 
 // 5. DUT: conv_pe

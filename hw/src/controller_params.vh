@@ -11,13 +11,14 @@
 
 `define Tin                 4               // INPUT CHANNEL TILING 
 `define Tout                4               // OUTPUT CHANNEL TILING
-`define W_Tin               2       
+`define W_Tin               $clog2(`Tin)       
+`define W_Tout              $clog2(`Tout)
 
 
 `define IFM_DW              `W_DATA * `Tin                  // 32
 `define OFM_DW              `W_DATA * `Tout                 // 32
 `define FILTER_DW           `W_KERNEL * `K * `K             // 72
-`define PSUM_DW             `W_PSUM 
+
 
 
 // ADDER TREE 4
@@ -55,8 +56,8 @@
 // FEATURE MAP BUFFER
 `define FM_BUFFER_CNT           2   // IFM, OFM
 `define FM_BUFFER_DW            `IFM_DW // 32
-`define FM_BUFFER_DEPTH         65536                           // 256KB / 4B
-`define FM_BUFFER_AW            $clog2(`FM_BUFFER_DEPTH) // 256KB / 4B
+`define FM_BUFFER_DEPTH         65536                    // 256KB / 4B
+`define FM_BUFFER_AW            $clog2(`FM_BUFFER_DEPTH) // 16
 
 `define FILTER_BUFFER_CNT       `Tout
 `define FILTER_BUFFER_DW        `FILTER_DW // 72
@@ -78,6 +79,10 @@
 
 
 // postprocessor
+`define PSUM_DW                 `W_PSUM 
+`define PSUM_BUFFER_DEPTH       256
+`define PSUM_BUFFER_AW          $clog2(`PSUM_BUFFER_DEPTH)
+
 `define BIAS_DW                 32
 `define BIAS_BUFFER_DEPTH       512
 `define BIAS_BUFFER_AW          $clog2(`BIAS_BUFFER_DEPTH)

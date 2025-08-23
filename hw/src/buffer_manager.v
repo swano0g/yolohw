@@ -42,7 +42,7 @@ module buffer_manager #(
     input  wire [W_CHANNEL-1:0]     q_channel,   // TILED input channel
     input  wire [W_SIZE+W_CHANNEL-1:0] q_row_stride, // q_width * q_channel
 
-    input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용 ?
+    // input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용 ?
 
     input  wire                     q_load_ifm,             // ifm load start
 
@@ -56,7 +56,6 @@ module buffer_manager #(
     // Buffer Manager <-> AXI
     input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
     input  wire                     read_data_vld,  // whether valid
-    // input  wire                     first,          // not use
 
     // Buffer Manager <-> Controller 
     input  wire                         c_ctrl_data_run,
@@ -89,7 +88,12 @@ module buffer_manager #(
     output wire [FILTER_DW-1:0]     fb_data0_out,
     output wire [FILTER_DW-1:0]     fb_data1_out,
     output wire [FILTER_DW-1:0]     fb_data2_out,
-    output wire [FILTER_DW-1:0]     fb_data3_out
+    output wire [FILTER_DW-1:0]     fb_data3_out,
+
+    // Buffer Manager <-> post processor or max pooling module
+    input wire                      pp_data_vld,
+    input wire [OFM_DW-1:0]         pp_data,
+    input wire [OFM_AW-1:0]         pp_addr
 );
 
 
@@ -194,6 +198,10 @@ wire                 ifm_buf_read_en;
 wire [OFM_AW-1:0]    ofm_buf_write_addr;
 wire [OFM_DW-1:0]    ofm_buf_write_data;
 wire                 ofm_buf_wea;
+//----------------------------------------------------------------------------
+assign ofm_buf_write_addr   = pp_addr;
+assign ofm_buf_write_data   = pp_data;
+assign ofm_buf_wea          = pp_data_vld;
 //----------------------------------------------------------------------------
 // AXI APPEND
 reg q_load_ifm_d;

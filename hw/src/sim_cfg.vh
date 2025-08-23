@@ -13,6 +13,7 @@
     `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test2_param_packed_weight.hex"
     `define TEST_AFFINE_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test2_affine_param.hex"
     `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test2_output_32b.hex"
+    `define TEST_ANS_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test2_answer_32b.hex"
     `define TEST_MEMORY    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test2_memory.hex"
     `define TEST_MEMORY_16 "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test2_memory_16b.hex"
     `define TEST_MEMORY_FILT_OFFSET     2048
@@ -30,6 +31,7 @@
         `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
         `define TEST_AFFINE_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_affine_param.hex"
         `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_output_32b.hex"
+        `define TEST_ANS_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_answer_32b.hex"
         `define TEST_MEMORY    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory.hex"
         `define TEST_MEMORY_16 "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory_16b.hex"
         `define TEST_MEMORY_FILT_OFFSET     4096
@@ -47,6 +49,7 @@
         `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
         `define TEST_AFFINE_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_affine_param.hex"
         `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_output_32b.hex"
+        `define TEST_ANS_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_answer_32b.hex"
         `define TEST_MEMORY    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory.hex"
         `define TEST_MEMORY_16 "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory_16b.hex"
         `define TEST_MEMORY_FILT_OFFSET     4096
