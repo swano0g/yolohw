@@ -23,6 +23,10 @@ module top_tb;
     parameter IFM_DW           = `IFM_DW;
     parameter IFM_AW           = `FM_BUFFER_AW;
 
+    parameter OFM_DW            = `FM_BUFFER_DW;
+    parameter OFM_AW            = `FM_BUFFER_AW;
+
+
     parameter FILTER_DW        = `FILTER_DW;
     parameter FILTER_AW        = `FILTER_BUFFER_AW;
 
@@ -64,6 +68,7 @@ module top_tb;
     reg  [AXI_WIDTH_DA-1:0]     filter_dram [0:65536-1];
     reg  [AXI_WIDTH_DA-1:0]     affine_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect      [0:65536-1];
+    reg  [OFM_DW-1:0]           answer      [0:65536-1];
 
 
     // IFM, FILTER AXI
@@ -113,16 +118,22 @@ module top_tb;
     wire                     pe_csync_done;
 
     // pe -> postprocessor 연결선 
-    wire [PE_ACCO_FLAT_BW-1:0]   pe_data;
-    wire                         pe_vld;
-    wire [W_SIZE-1:0]            pe_row;
-    wire [W_SIZE-1:0]            pe_col;
-    wire [W_CHANNEL-1:0]         pe_chn;
-    wire [W_CHANNEL-1:0]         pe_chn_out;
-    wire                         pe_is_last_chn; 
+    wire [PE_ACCO_FLAT_BW-1:0]  pe_data;
+    wire                        pe_vld;
+    wire [W_SIZE-1:0]           pe_row;
+    wire [W_SIZE-1:0]           pe_col;
+    wire [W_CHANNEL-1:0]        pe_chn;
+    wire [W_CHANNEL-1:0]        pe_chn_out;
+    wire                        pe_is_first_chn;
+    wire                        pe_is_last_chn; 
 
     // pp
-    wire                         pp_load_done;
+    wire                        pp_load_done;
+    // pp -> buffer manager
+    wire                        pp_data_vld;
+    wire [OFM_DW-1:0]           pp_data;
+    wire [OFM_AW-1:0]           pp_addr;
+
 
     //----------------------------------------------------------------------  
     // 3) clock & reset
@@ -183,8 +194,6 @@ module top_tb;
         .q_channel          (q_channel        ),
         .q_row_stride       (q_row_stride     ),
 
-        .q_layer            (q_layer          ),
-
         .q_load_ifm         (q_load_ifm       ),
         .q_load_filter      (q_load_filter    ),
         .o_load_filter_done (load_filter_done ),
@@ -222,7 +231,12 @@ module top_tb;
         .fb_data0_out       (filter_data_0    ),
         .fb_data1_out       (filter_data_1    ),
         .fb_data2_out       (filter_data_2    ),
-        .fb_data3_out       (filter_data_3    )
+        .fb_data3_out       (filter_data_3    ),
+
+        // Buffer Manager <-> post processor or max pooling module
+        .pp_data_vld        (pp_data_vld      ),
+        .pp_data            (pp_data          ),
+        .pp_addr            (pp_addr          )
     );
     //----------------------------------------------------------------------  
     // 6) pe_engine instance
@@ -267,6 +281,7 @@ module top_tb;
         .o_pe_col(pe_col),
         .o_pe_chn(pe_chn),
         .o_pe_chn_out(pe_chn_out),
+        .o_pe_is_first_chn(pe_is_first_chn),
         .o_pe_is_last_chn(pe_is_last_chn) 
     );
     //----------------------------------------------------------------------  
@@ -277,12 +292,11 @@ module top_tb;
         .rstn(rstn),
 
         // postprocessor <-> top
-        .q_layer(q_layer),
-        
         .q_width(q_width),
         .q_height(q_height),
         .q_channel(q_channel),    
         .q_channel_out(q_channel_out),
+
 
         .q_load_bias(q_load_bias),
         .q_load_scale(q_load_scale),
@@ -291,6 +305,8 @@ module top_tb;
         .c_ctrl_csync_run(ctrl_csync_run),
         .c_ctrl_psync_run(ctrl_psync_run),
         .c_ctrl_psync_phase(ctrl_psync_phase),
+
+        .c_ctrl_chn_out(chn_out),
 
 
         .o_pp_load_done(pp_load_done),
@@ -307,12 +323,13 @@ module top_tb;
         .pe_col_i(pe_col),
         .pe_chn_i(pe_chn),
         .pe_chn_out_i(pe_chn_out),
-        .pe_is_last_chn(pe_is_last_chn), 
+        .pe_is_first_chn_i(pe_is_first_chn),
+        .pe_is_last_chn_i(pe_is_last_chn), 
 
         // postprocessor <-> buffer_manager
-        .o_pp_data_vld(),
-        .o_pp_data(),
-        .o_pp_addr()
+        .o_pp_data_vld(pp_data_vld),
+        .o_pp_data(pp_data),
+        .o_pp_addr(pp_addr)
     );
     
     //----------------------------------------------------------------------  
@@ -591,6 +608,7 @@ module top_tb;
         $readmemh(`TEST_FILT_PATH, filter_dram);
         $readmemh(`TEST_AFFINE_PATH, affine_dram);
         $readmemh(`TEST_EXP_PATH, expect);
+        $readmemh(`TEST_ANS_PATH, answer);
     end
 
 
@@ -607,6 +625,8 @@ module top_tb;
             max_print = 200;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
+            $display("------------------------------------------------------------");
+            $display("PSUM CHECK");
 
             for (i = 0; i < exp_words; i = i + 1) begin
                 got = u_postprocessor.psumbuf[i]; 
@@ -630,6 +650,53 @@ module top_tb;
             $display("------------------------------------------------------------");
             if (errors == 0) begin
                 $display("RESULT: PASS");
+            end else begin
+                $display("RESULT: FAIL");
+            end
+            // -----------------------------------------------
+
+        end
+    endtask
+
+
+    task automatic tb_check_output_vs_expect;
+        integer i;
+        integer exp_words;
+        integer errors, checks;
+        integer max_print, printed;
+        reg [W_PSUM-1:0] got, exp;
+        
+        begin
+            errors    = 0;
+            checks    = 0;
+            max_print = 200;
+            printed   = 0;
+            exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
+            $display("------------------------------------------------------------");
+            $display("ANSWER CHECK");
+
+            for (i = 0; i < exp_words; i = i + 1) begin
+                got = u_buffer_manager.u_fm_buf1.ram[i]; 
+                exp = answer[i]; 
+                if (got !== exp) begin
+                    errors = errors + 1;
+                    if (printed < max_print) begin
+                        $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
+                                $time, i, got, exp);
+                        printed = printed + 1;
+                    end
+                end
+                checks = checks + 1;
+            end
+
+            // --------- summary ---------
+            $display("------------------------------------------------------------");
+            $display("ANSWER CHECK SUMMARY @%0t", $time);
+            $display("  total=%0d  match=%0d  errors=%0d",
+                    checks, checks - errors, errors);
+            $display("------------------------------------------------------------");
+            if (errors == 0) begin
+                $display("RESULT: PASS");
                 $finish;
             end else begin
                 $display("RESULT: FAIL");
@@ -638,6 +705,8 @@ module top_tb;
 
         end
     endtask
+
+
 
     reg checked_done;
     initial checked_done = 1'b0;
@@ -648,12 +717,14 @@ module top_tb;
             @(posedge clk);
             @(posedge clk);
             tb_check_psum_vs_expect();
+
+            tb_check_output_vs_expect();
         end
     end
 
     initial begin
         @(posedge checked_done);     
-        repeat (100) @(posedge clk);
+        repeat (200) @(posedge clk);
         $finish;
     end
 
