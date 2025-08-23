@@ -1,5 +1,5 @@
 `include "controller_params.vh"
-`include "sim_cfg.vh"
+
 //----------------------------------------------------------------+
 // Project: Deep Learning Hardware Design Contest
 // Module: yolo_engine
@@ -39,7 +39,17 @@ module yolo_engine #(
     parameter W_PSUM            = `W_PSUM,
     parameter PE_IFM_FLAT_BW    = `PE_IFM_FLAT_BW,
     parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW,
-    parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW
+    parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW,
+
+    parameter TEST_COL          = 16,
+    parameter TEST_ROW          = 16, 
+    parameter TEST_T_CHNIN      = 4,
+    parameter TEST_T_CHNOUT     = 8,  
+    parameter TEST_FRAME_SIZE   = TEST_ROW * TEST_COL * TEST_T_CHNIN,
+
+    parameter DRAM_FILTER_OFFSET = 4096,
+    parameter DRAM_BIAS_OFFSET   = DRAM_FILTER_OFFSET + 4608,
+    parameter DRAM_SCALE_OFFSET  = DRAM_BIAS_OFFSET + 128 
 
 )
 (
@@ -107,10 +117,6 @@ module yolo_engine #(
 
 
 localparam BIT_TRANS = 18;
-
-localparam DRAM_FILTER_OFFSET = 4096;
-localparam DRAM_BIAS_OFFSET   = DRAM_FILTER_OFFSET + 4608; // (# of filters, not real)
-localparam DRAM_SCALE_OFFSET  = DRAM_BIAS_OFFSET + 128;   // (# of bias, not real)
 
 
 
@@ -324,11 +330,11 @@ wire layer_done;       // 이미 cnn_ctrl에서 나옴
 reg [2:0] q_state;
 
 localparam 
-    S_IDLE          = 0, 
-    S_LOAD_IFM      = 1, // initial once
-    S_SAVE_OFM      = 2, // layer 14, 20
-    S_LOAD_CFG      = 3,
-    S_WAIT_CNN_CTRL = 4;  // each layer
+    S_IDLE          = 3'd0, 
+    S_LOAD_IFM      = 3'd1, // initial once
+    S_SAVE_OFM      = 3'd2, // layer 14, 20
+    S_LOAD_CFG      = 3'd3,
+    S_WAIT_CNN_CTRL = 3'd4;  // each layer
 
 
 
@@ -344,7 +350,22 @@ always @(posedge clk or negedge rstn) begin
         q_layer          <= 0;
         q_c_ctrl_start   <= 0;
 
+        q_layer         <= 0;
+        q_width         <= 0;
+        q_height        <= 0;
+        q_channel       <= 0;
+        q_channel_out   <= 0;
+        q_frame_size    <= 0;
+        q_row_stride    <= 0;
+        q_maxpool       <= 0;
+
+        q_load_ifm <= 0;
+        q_load_filter <= 0;
+        q_load_bias <= 0;
+        q_load_scale <= 0;
+
         // layer info reset...
+
     end
     else begin
         q_c_ctrl_start <= 1'b0; // pulse
@@ -361,7 +382,7 @@ always @(posedge clk or negedge rstn) begin
             S_LOAD_IFM: begin
                 if (dma_ifm_load_done) begin
                     // 첫 레이어 실행 트리거는 다음 상태에서 cfg 로드 후 발생
-                    q_state        <= S_LOAD_CFG;
+                    q_state        <= S_WAIT_CNN_CTRL;
                     q_c_ctrl_start <= 1'b1;
                 end
             end            
@@ -370,14 +391,14 @@ always @(posedge clk or negedge rstn) begin
                 if (debug_on) begin 
                     // 우선은 여기로만 들어옴.
                     q_layer         <= 20;
-                    q_width         <= `TEST_COL;       // 16
-                    q_height        <= `TEST_ROW;       // 16
-                    q_channel       <= `TEST_T_CHNIN;   // 16 (4)
-                    q_channel_out   <= `TEST_T_CHNOUT;  // 32 (8) 
-                    q_frame_size    <= `TEST_FRAME_SIZE;
-                    q_row_stride    <= `TEST_COL * `TEST_T_CHNIN;
+                    q_width         <= TEST_COL;       // 16
+                    q_height        <= TEST_ROW;       // 16
+                    q_channel       <= TEST_T_CHNIN;   // 16 (4)
+                    q_channel_out   <= TEST_T_CHNOUT;  // 32 (8) 
+                    q_frame_size    <= TEST_FRAME_SIZE;
+                    q_row_stride    <= TEST_COL * TEST_T_CHNIN;
                     q_maxpool       <= 0;
-
+                    // 만약 레이어가 늘어나면 분기하는 로직이 필요함.
                     q_state <= S_LOAD_IFM;
                 end else begin 
                     // layer 정보 불러오기 
@@ -401,7 +422,6 @@ always @(posedge clk or negedge rstn) begin
                 if (layer_done) begin 
                     // bebug end
                     if (q_layer == 20) begin 
-
                         q_state <= S_IDLE;
                         ap_done <= 1;
                     end
@@ -592,7 +612,7 @@ assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
 // 블록단위로 안떨어지는 경우..
 // 그냥 zero padding
 
-reg  [31:0] dma_load_bytes_total;  
+// reg  [31:0] dma_load_bytes_total;  
 
 // 블록 수 = 전체 바이트 / 64 (>> 6)
 
@@ -639,7 +659,7 @@ always @(posedge clk or negedge rstn) begin
         case (dma_load_state)
             // ------------------------------------------------
             DMA_LOAD_IDLE: begin
-                dma_load_cur_sel <= SEL_NONE;
+                // dma_load_cur_sel <= SEL_NONE;
 
                 // 발행 한적 없을 때
                 if (!dma_load_kicked && in_load_ifm_stage) begin
@@ -696,7 +716,7 @@ always @(posedge clk or negedge rstn) begin
             // Wait until DMA finishes issuing and receiving all data
             DMA_LOAD_WAIT: begin
                 // Option A: strictly wait for both controls
-                if (dma_ctrl_read_done && read_done) begin
+                if (dma_ctrl_read_done) begin
                     case (dma_load_cur_sel)
                         SEL_IFM: begin
                             dma_load_state        <= DMA_LOAD_IDLE;

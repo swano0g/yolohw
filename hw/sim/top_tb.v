@@ -1,7 +1,13 @@
 `timescale 1ns/1ps
 `include "controller_params.vh"
-`include "sim_cfg.vh"
 
+// select test case
+// `define TESTCASE_0 1
+`define TESTCASE_1 1
+// `define TESTCASE_2 1
+
+
+`include "sim_cfg.vh"
 module top_tb;
     //----------------------------------------------------------------------  
     // 1) Parameter

@@ -2,7 +2,15 @@
 
 module yolo_engine_tb;
 
-`include "../src/define.v"
+
+// select test case
+// `define TESTCASE_0 1
+`define TESTCASE_1 1
+// `define TESTCASE_2 1
+
+
+`include "define.v"
+`include "sim_cfg.vh"
 
 localparam MEM_ADDRW = 22;
 localparam MEM_DW = 16;
@@ -12,10 +20,10 @@ localparam I = 4;
 localparam L = 8;
 localparam M = D/8;
 
-
-localparam DRAM_FILTER_OFFSET = 4096;
-localparam DRAM_BIAS_OFFSET   = DRAM_FILTER_OFFSET + 4608; // (# of filters, not real)
-localparam DRAM_SCALE_OFFSET  = DRAM_BIAS_OFFSET + 128;   // (# of bias, not real)
+localparam DRAM_IFM_OFFSET    = 0;
+localparam DRAM_FILTER_OFFSET = `TEST_MEMORY_FILT_OFFSET;
+localparam DRAM_BIAS_OFFSET   = `TEST_MEMORY_BIAS_OFFSET;
+localparam DRAM_SCALE_OFFSET  = `TEST_MEMORY_SCALE_OFFSET; 
 
 
 // Clock
@@ -73,7 +81,7 @@ wire [MEM_DW-1:0]      mem_di;
 wire [MEM_DW-1:0]      mem_do;
 
 //--------------------------------------------------------------------
-//AXI Slave External Memory: Input
+// AXI Slave External Memory: Input
 //--------------------------------------------------------------------
 axi_sram_if #(  //New
    .MEM_ADDRW(MEM_ADDRW), .MEM_DW(MEM_DW),
@@ -82,32 +90,32 @@ u_axi_ext_mem_if_input(
    .ACLK(clk), .ARESETn(rstn),
     
    //AXI Slave IF
-   .AWID	(M_AWID		),       // Address ID
-   .AWADDR	(M_AWADDR	),     // Address Write
-   .AWLEN	(M_AWLEN	 ),      // Transfer length
-   .AWSIZE	(M_AWSIZE	),     // Transfer width
-   .AWBURST	(M_AWBURST	),    // Burst type
-   .AWLOCK	(M_AWLOCK	),     // Atomic access information
-   .AWCACHE	(M_AWCACHE	),    // Cachable/bufferable infor
-   .AWPROT	(M_AWPROT	),     // Protection info
-   .AWVALID	(M_AWVALID	),    // address/control valid handshake
+   .AWID	(M_AWID		),      // Address ID
+   .AWADDR	(M_AWADDR	),      // Address Write
+   .AWLEN	(M_AWLEN	),      // Transfer length
+   .AWSIZE	(M_AWSIZE	),      // Transfer width
+   .AWBURST	(M_AWBURST	),      // Burst type
+   .AWLOCK	(M_AWLOCK	),      // Atomic access information
+   .AWCACHE	(M_AWCACHE	),      // Cachable/bufferable infor
+   .AWPROT	(M_AWPROT	),      // Protection info
+   .AWVALID	(M_AWVALID	),      // address/control valid handshake
    .AWREADY	(M_AWREADY	),
    //Write data channel
-   .WID		(M_WID		),        // Write ID
-   .WDATA	(M_WDATA	   ),      // Write Data bus
-   .WSTRB	(M_WSTRB	   ),      // Write Data byte lane strobes
-   .WLAST	(M_WLAST	   ),      // Last beat of a burst transfer
-   .WVALID	(M_WVALID	),     // Write data valid
-   .WREADY	(M_WREADY	),     // Write data ready
+   .WID		(M_WID		),      // Write ID
+   .WDATA	(M_WDATA	),      // Write Data bus
+   .WSTRB	(M_WSTRB	),      // Write Data byte lane strobes
+   .WLAST	(M_WLAST	),      // Last beat of a burst transfer
+   .WVALID	(M_WVALID	),      // Write data valid
+   .WREADY	(M_WREADY	),      // Write data ready
     //Write response channel
-   .BID		(M_BID		),        // buffered response ID
-   .BRESP	(M_BRESP	   ),      // Buffered write response
-   .BVALID	(M_BVALID	),     // Response info valid
-   .BREADY	(M_BREADY	),     // Response info ready (from Master)
-      
+   .BID		(M_BID		),      // buffered response ID
+   .BRESP	(M_BRESP    ),      // Buffered write response
+   .BVALID	(M_BVALID	),      // Response info valid
+   .BREADY	(M_BREADY	),      // Response info ready (from Master)
+    // Read address
    .ARID    (M_ARID		),   // Read addr ID
    .ARADDR  (M_ARADDR	),   // Address Read 
-   .ARLEN   (M_ARLEN	   ),   // Transfer length
+   .ARLEN   (M_ARLEN	),   // Transfer length
    .ARSIZE  (M_ARSIZE	),   // Transfer width
    .ARBURST (M_ARBURST	),   // Burst type
    .ARLOCK  (M_ARLOCK	),   // Atomic access information
@@ -115,10 +123,11 @@ u_axi_ext_mem_if_input(
    .ARPROT  (M_ARPROT	),   // Protection info
    .ARVALID (M_ARVALID	),   // address/control valid handshake
    .ARREADY (M_ARREADY	),
+    // Read data 
    .RID     (M_RID		),   // Read ID
-   .RDATA   (M_RDATA	   ),   // Read data bus
-   .RRESP   (M_RRESP	   ),   // Read response
-   .RLAST   (M_RLAST	   ),   // Last beat of a burst transfer
+   .RDATA   (M_RDATA	),   // Read data bus
+   .RRESP   (M_RRESP	),   // Read response
+   .RLAST   (M_RLAST	),   // Last beat of a burst transfer
    .RVALID  (M_RVALID	),   // Read data valid 
    .RREADY  (M_RREADY	),   // Read data ready (to Slave)
 
@@ -135,16 +144,16 @@ u_axi_ext_mem_if_input(
 // Inputs
 //instruction memory
 sram #(
-   .FILE_NAME(IFM_FILE),
+   .FILE_NAME(`TEST_MEMORY_16),
    .SIZE(2**MEM_ADDRW),
    .WL_ADDR(MEM_ADDRW),
-   .WL_DATA(MEM_DW))
+   .WL_DATA(MEM_DW  ))
 u_ext_mem_input (
-   .clk   (clk		   ),
+   .clk   (clk	    ),
    .rst   (rstn		),
    .addr  (mem_addr	),
-   .wdata (mem_di	   ),
-   .rdata (mem_do	   ),
+   .wdata (mem_di	),
+   .rdata (mem_do	),
    .ena   (1'b0		)     // Read only
    );
 
@@ -161,7 +170,16 @@ yolo_engine #(
     .AXI_WIDTH_DA(D),
     .AXI_WIDTH_DS(M),
     .MEM_BASE_ADDR(2048),
-    .MEM_DATA_BASE_ADDR(2048)
+    .MEM_DATA_BASE_ADDR(2048),
+    // for debugging
+    .TEST_COL(`TEST_COL),
+    .TEST_ROW(`TEST_ROW), 
+    .TEST_T_CHNIN(`TEST_T_CHNIN),
+    .TEST_T_CHNOUT(`TEST_T_CHNOUT),  
+    .TEST_FRAME_SIZE(`TEST_FRAME_SIZE),
+    .DRAM_FILTER_OFFSET(DRAM_FILTER_OFFSET),
+    .DRAM_BIAS_OFFSET(DRAM_BIAS_OFFSET),
+    .DRAM_SCALE_OFFSET(DRAM_SCALE_OFFSET)
 )
 u_yolo_engine
 (
@@ -173,60 +191,66 @@ u_yolo_engine
     .i_ctrl_reg2(i_2     ), // Write_address
     .i_ctrl_reg3(32'd0   ), // Reserved
 
+    // READ ADDRESS
     .M_ARVALID	(M_ARVALID),
     .M_ARREADY	(M_ARREADY),
     .M_ARADDR	(M_ARADDR ),
-    .M_ARID		(M_ARID	 ),
-    .M_ARLEN	(M_ARLEN	 ),
+    .M_ARID		(M_ARID	  ),
+    .M_ARLEN	(M_ARLEN  ),
     .M_ARSIZE	(M_ARSIZE ),
     .M_ARBURST	(M_ARBURST),
     .M_ARLOCK	(M_ARLOCK ),
     .M_ARCACHE	(M_ARCACHE),
     .M_ARPROT	(M_ARPROT ),
-    .M_ARQOS	(			 ),
-    .M_ARREGION(			 ),
-    .M_ARUSER	(			 ),
+    .M_ARQOS	(	      ),
+    .M_ARREGION (		  ),
+    .M_ARUSER	(		  ),
+    // READ DATA
     .M_RVALID	(M_RVALID ),
     .M_RREADY	(M_RREADY ),
-    .M_RDATA	(M_RDATA	 ),
-    .M_RLAST	(M_RLAST	 ),
-    .M_RID		(M_RID	 ),
-    .M_RUSER	(			 ),
-    .M_RRESP	(M_RRESP	 ),
+    .M_RDATA	(M_RDATA  ),
+    .M_RLAST	(M_RLAST  ),
+    .M_RID		(M_RID	  ),
+    .M_RUSER	(		  ),
+    .M_RRESP	(M_RRESP  ),
     
+
+    // WRITE
     .M_AWVALID	(M_AWVALID),
     .M_AWREADY	(M_AWREADY),
     .M_AWADDR	(M_AWADDR ),
-    .M_AWID		(M_AWID	 ),
-    .M_AWLEN	(M_AWLEN	 ),
+    .M_AWID		(M_AWID	  ),
+    .M_AWLEN	(M_AWLEN  ),
     .M_AWSIZE	(M_AWSIZE ),
     .M_AWBURST	(M_AWBURST),
     .M_AWLOCK	(M_AWLOCK ),
     .M_AWCACHE	(M_AWCACHE),
     .M_AWPROT	(M_AWPROT ),
-    .M_AWQOS	(			 ),
-    .M_AWREGION(			 ),
-    .M_AWUSER	(			 ),
+    .M_AWQOS	(		  ),
+    .M_AWREGION (		  ),
+    .M_AWUSER	(		  ),
     
     .M_WVALID	(M_WVALID ),
     .M_WREADY	(M_WREADY ),
-    .M_WDATA	(M_WDATA	 ),
-    .M_WSTRB	(M_WSTRB	 ),
-    .M_WLAST	(M_WLAST	 ),
-    .M_WID		(M_WID	 ),
-    .M_WUSER	(			 ),
+    .M_WDATA	(M_WDATA  ),
+    .M_WSTRB	(M_WSTRB  ),
+    .M_WLAST	(M_WLAST  ),
+    .M_WID		(M_WID	  ),
+    .M_WUSER	(		  ),
     
     .M_BVALID	(M_BVALID ),
     .M_BREADY	(M_BREADY ),
-    .M_BRESP	(M_BRESP	 ),
-    .M_BID		(M_BID	 ),
-    .M_BUSER	(			 ),
+    .M_BRESP	(M_BRESP  ),
+    .M_BID		(M_BID	  ),
+    .M_BUSER	(		  ),
     
     .network_done(network_done),
     .network_done_led(network_done_led)
 );
 
-
+//--------------------------------------------------------------------
+// Stimulus
+//--------------------------------------------------------------------
 initial begin
    rstn = 1'b0;         // Reset, low active   
    i_0 = 0;
@@ -243,14 +267,83 @@ initial begin
          @(posedge clk)
             i_0 = 32'd0;
 
-   while(!network_done) begin 
-         #(128*CLK_PERIOD) @(posedge clk);
-   end 
-
-   #(100*CLK_PERIOD) 
-         @(posedge clk) $stop;
 end
 
+
+//--------------------------------------------------------------------
+// Compare output
+//--------------------------------------------------------------------
+`include "controller_params.vh"
+
+reg  [`PSUM_DW-1:0]          expect      [0:65536-1];
+        
+initial begin    
+    $readmemh(`TEST_EXP_PATH, expect);
+end
+
+
+task automatic tb_check_psum_vs_expect;
+    integer i;
+    integer exp_words;
+    integer errors, checks;
+    integer max_print, printed;
+    reg [`W_PSUM-1:0] got, exp;
+    
+    begin
+        errors    = 0;
+        checks    = 0;
+        max_print = 50;
+        printed   = 0;
+        exp_words = `TEST_ROW * `TEST_COL * `TEST_CHNOUT;
+
+        for (i = 0; i < exp_words; i = i + 1) begin
+            got = u_yolo_engine.u_postprocessor.psumbuf[i]; 
+            exp = expect[i]; 
+            if (got !== exp) begin
+                errors = errors + 1;
+                if (printed < max_print) begin
+                    $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
+                            $time, i, got, exp);
+                    printed = printed + 1;
+                end
+            end
+            checks = checks + 1;
+        end
+
+        // --------- summary ---------
+        $display("------------------------------------------------------------");
+        $display("PSUM CHECK SUMMARY @%0t", $time);
+        $display("  total=%0d  match=%0d  errors=%0d",
+                checks, checks - errors, errors);
+        $display("------------------------------------------------------------");
+        if (errors == 0) begin
+            $display("RESULT: PASS");
+            $finish;
+        end else begin
+            $display("RESULT: FAIL");
+        end
+        // -----------------------------------------------
+
+    end
+endtask
+
+reg checked_done;
+initial checked_done = 1'b0;
+
+always @(posedge clk) begin
+    if (network_done && !checked_done) begin
+        checked_done <= 1'b1;
+        @(posedge clk);
+        @(posedge clk);
+        tb_check_psum_vs_expect();
+    end
+end
+
+initial begin
+    @(posedge checked_done);     
+    repeat (100) @(posedge clk);
+    $finish;
+end
 
 
 endmodule
