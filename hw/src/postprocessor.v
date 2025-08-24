@@ -392,7 +392,8 @@ u_psum_buf3 (
 // IV. bias & scale csync
 //============================================================================
 reg [AFFINE_DW-1:0] bias0, bias1, bias2, bias3;
-reg [7:0] scale0, scale1, scale2, scale3; // 00 00 00 40 이면 7을 저장해놓기
+reg [7:0] scale0, scale1, scale2, scale3; 
+
 
 function integer scale2shift;
     input [AFFINE_DW-1:0] sc;
@@ -418,6 +419,21 @@ reg [W_Tout-1:0]    affine_offset;
 reg [AFFINE_AW-1:0] affine_address;
 
 
+wire vld_clear = !vld_pipe[STG-1] && c_ctrl_csync_run;
+
+reg  vld_clear_d;
+
+always @(posedge clk or negedge rstn) begin 
+    if (!rstn) begin 
+        vld_clear_d <= 0;
+    end else begin 
+        vld_clear_d <= vld_clear;
+    end
+end
+
+wire affine_load_start = vld_clear && !vld_clear_d;
+
+
 always @(posedge clk or negedge rstn) begin 
     if (!rstn) begin 
         affine_loading <= 0;
@@ -432,8 +448,7 @@ always @(posedge clk or negedge rstn) begin
         scale0 <= 8'd0; scale1 <= 8'd0; scale2 <= 8'd0; scale3 <= 8'd0;
     end
     else begin 
-
-        if (csync_start) begin 
+        if (affine_load_start) begin 
             affine_loading <= 1;
             affine_offset <= 0;
             affine_address <= (c_ctrl_chn_out << 2);
@@ -483,11 +498,11 @@ assign scale_buf_read_addr = affine_address;
 // V. accumulating
 //============================================================================
 // STG 0 
-
-assign psum_buf0_read_en = vld_pipe[0];
-assign psum_buf1_read_en = vld_pipe[0];
-assign psum_buf2_read_en = vld_pipe[0];
-assign psum_buf3_read_en = vld_pipe[0];
+// data vld and not first chn
+assign psum_buf0_read_en = vld_pipe[0] && !pad_pipe[0][0];
+assign psum_buf1_read_en = vld_pipe[0] && !pad_pipe[0][0];
+assign psum_buf2_read_en = vld_pipe[0] && !pad_pipe[0][0];
+assign psum_buf3_read_en = vld_pipe[0] && !pad_pipe[0][0];
 
 assign psum_buf0_read_addr = col_pipe[0];
 assign psum_buf1_read_addr = col_pipe[0];
@@ -506,8 +521,8 @@ always @(posedge clk or negedge rstn) begin
         psum3 <= 0;
     end else begin 
         // is first chn
-        if (vld_pipe[0]) begin 
-            if (pad_pipe[0][0]) begin 
+        if (vld_pipe[1]) begin 
+            if (pad_pipe[1][0]) begin 
                 psum0 <= $signed(data_pipe[1][0*PSUM_DW+:PSUM_DW]) + $signed(bias0);
                 psum1 <= $signed(data_pipe[1][1*PSUM_DW+:PSUM_DW]) + $signed(bias1);
                 psum2 <= $signed(data_pipe[1][2*PSUM_DW+:PSUM_DW]) + $signed(bias2);
@@ -519,7 +534,6 @@ always @(posedge clk or negedge rstn) begin
                 psum3 <= $signed(data_pipe[1][3*PSUM_DW+:PSUM_DW]) + $signed(psum_buf3_read_data);
             end
         end
-        
     end
 end
 //----------------------------------------------------------------------------
@@ -604,9 +618,8 @@ reg  [PSUM_DW-1:0] psumbuf [DBG_PSUM_DEPTH-1:0]; // dbg
 wire [PSUM_DW-1:0] acc_arr [0:Tout-1];
 
 reg [DBG_PSUM_AW-1:0] base_addr;
-integer i;
-genvar g;
 
+genvar g;
 generate
     for (g = 0; g < Tout; g = g + 1) begin : UNPACK_ACC
         assign acc_arr[g] = pe_data_i[(g+1)*PSUM_DW-1 -: PSUM_DW];
