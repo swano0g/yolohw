@@ -182,9 +182,9 @@ assign mp_buf_read_en   = is_odd_row && is_even_col;
 assign mp_buf_read_addr = (pp_col >> 1);
 
 wire [OUT_DW-1:0]  buf_data0 = mp_buf_read_data[0*OUT_DW+:OUT_DW];
-wire [OUT_DW-1:0]  buf_data1 = mp_buf_read_data[0*OUT_DW+:OUT_DW];
-wire [OUT_DW-1:0]  buf_data2 = mp_buf_read_data[0*OUT_DW+:OUT_DW];
-wire [OUT_DW-1:0]  buf_data3 = mp_buf_read_data[0*OUT_DW+:OUT_DW];
+wire [OUT_DW-1:0]  buf_data1 = mp_buf_read_data[1*OUT_DW+:OUT_DW];
+wire [OUT_DW-1:0]  buf_data2 = mp_buf_read_data[2*OUT_DW+:OUT_DW];
+wire [OUT_DW-1:0]  buf_data3 = mp_buf_read_data[3*OUT_DW+:OUT_DW];
 
 
 wire [OUT_DW-1:0] rowmax0 = (colmax0 > buf_data0) ? colmax0 : buf_data0;
