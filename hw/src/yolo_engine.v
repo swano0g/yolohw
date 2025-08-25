@@ -383,7 +383,7 @@ always @(posedge clk or negedge rstn) begin
             S_LOAD_CFG: begin
                 if (debug_on) begin 
                     // 우선은 여기로만 들어옴.
-                    q_layer         <= 20;
+                    q_layer         <= 4'd31;
                     q_width         <= TEST_COL;       // 16
                     q_height        <= TEST_ROW;       // 16
                     q_channel       <= TEST_T_CHNIN;   // 16 (4)
@@ -414,7 +414,7 @@ always @(posedge clk or negedge rstn) begin
             S_WAIT_CNN_CTRL: begin 
                 if (layer_done) begin 
                     // bebug end
-                    if (q_layer == 20) begin 
+                    if (q_layer == 4'd31) begin 
                         q_state <= S_IDLE;
                         ap_done <= 1;
                     end
@@ -605,6 +605,17 @@ assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
 
 // 블록 수 = 전체 바이트 / 64 (>> 6)
 
+// 읽어야할 데이터가 64B의 배수가 아닐 때 -> 우선 계산 진행.
+reg rd_inflight;
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) rd_inflight <= 1'b0;
+    else if (dma_rd_go)            rd_inflight <= 1'b1;   // kick 순간 busy 진입
+    else if (dma_ctrl_read_done)   rd_inflight <= 1'b0;   // 컨트롤러 done에서만 내려감
+end
+
+wire dma_rd_plane_busy = rd_inflight;
+
 
 
 // -----------------------------------------------------------------------------
@@ -631,15 +642,15 @@ always @(posedge clk or negedge rstn) begin
         dma_bias_load_done_reg   <= 0;
         dma_scale_load_done_reg  <= 0;  
 
-        // 상위가 stage를 떠났으면 FSM 정리
-        if ((in_load_ifm_leave && (dma_load_cur_sel==SEL_IFM)) ||
-            (in_load_filter_leave && (dma_load_cur_sel==SEL_FILTER)) ||
-            (in_load_affine_leave && ((dma_load_cur_sel==SEL_BIAS)||(dma_load_cur_sel==SEL_SCALE)))) begin
-            dma_load_state       <= DMA_LOAD_IDLE;
-            dma_load_cur_sel     <= SEL_NONE;
-            dma_load_kicked      <= 1'b0;
-            in_load_affine_phase <= 0;
-        end
+        // dma drain
+        // if ((in_load_ifm_leave && (dma_load_cur_sel==SEL_IFM)) ||
+        //     (in_load_filter_leave && (dma_load_cur_sel==SEL_FILTER)) ||
+        //     (in_load_affine_leave && ((dma_load_cur_sel==SEL_BIAS)||(dma_load_cur_sel==SEL_SCALE)))) begin
+        //     dma_load_state       <= DMA_LOAD_IDLE;
+        //     dma_load_cur_sel     <= SEL_NONE;
+        //     dma_load_kicked      <= 1'b0;
+        //     in_load_affine_phase <= 0;
+        // end
 
         case (dma_load_state)
             // ------------------------------------------------
@@ -647,15 +658,15 @@ always @(posedge clk or negedge rstn) begin
                 // dma_load_cur_sel <= SEL_NONE;
 
                 // 발행 한적 없을 때
-                if (!dma_load_kicked && in_load_ifm_stage) begin
+                if (!dma_load_kicked && in_load_ifm_enter && !dma_rd_plane_busy) begin
                     dma_load_cur_sel <= SEL_IFM;
                     dma_load_state   <= DMA_LOAD_SETUP;
                 end
-                else if (!dma_load_kicked && in_load_filter_stage) begin
+                else if (!dma_load_kicked && in_load_filter_enter && !dma_rd_plane_busy) begin
                     dma_load_cur_sel <= SEL_FILTER;
                     dma_load_state   <= DMA_LOAD_SETUP;
                 end
-                else if (!dma_load_kicked && in_load_affine_stage) begin
+                else if (!dma_load_kicked && in_load_affine_enter && !dma_rd_plane_busy) begin
                     dma_load_cur_sel <= SEL_BIAS;
                     dma_load_state   <= DMA_LOAD_SETUP;
                 end
@@ -705,11 +716,13 @@ always @(posedge clk or negedge rstn) begin
                     case (dma_load_cur_sel)
                         SEL_IFM: begin
                             dma_load_state        <= DMA_LOAD_IDLE;
+                            dma_load_kicked       <= 1'b0;
                             q_load_ifm            <= 1'b0;
                             dma_ifm_load_done_reg <= 1'b1;
                         end
                         SEL_FILTER: begin 
                             dma_load_state           <= DMA_LOAD_IDLE;
+                            dma_load_kicked          <= 1'b0;
                             q_load_filter            <= 1'b0;
                             dma_filter_load_done_reg <= 1'b1;
 
@@ -727,8 +740,10 @@ always @(posedge clk or negedge rstn) begin
                         SEL_SCALE: begin
                             dma_load_state          <= DMA_LOAD_IDLE;
                             q_load_scale            <= 1'b0;
+                            dma_load_kicked         <= 1'b0;
                             dma_scale_load_done_reg <= 1'b1;
 
+                            in_load_affine_phase    <= 1'b0;
                             dma_scale_rd_base_addr  <= dma_scale_rd_base_addr + (q_channel_out << 4);
                         end
                     endcase
@@ -739,6 +754,80 @@ always @(posedge clk or negedge rstn) begin
         endcase
     end
 end
+//----------------------------------------------------------------
+// beat counter
+localparam BYTES_PER_BEAT     = 4;
+localparam LOG_BYTES_PER_BEAT = $clog2(BYTES_PER_BEAT);
+
+
+reg [15:0] payload_beats_need;
+reg [15:0] payload_beats_seen;
+wire       payload_done_early = (payload_beats_seen >= payload_beats_need);
+
+
+wire [31:0] need_bytes_ifm    = (q_frame_size << 2);
+wire [31:0] need_bytes_filter = ((q_channel << 4) * 9);
+wire [31:0] need_bytes_bias   = (q_channel_out << 4);
+wire [31:0] need_bytes_scale  = (q_channel_out << 4);
+
+wire [31:0] need_bytes_cur = (dma_load_cur_sel==SEL_IFM)    ? need_bytes_ifm 
+                           : (dma_load_cur_sel==SEL_FILTER) ? need_bytes_filter
+                           : (dma_load_cur_sel==SEL_BIAS)   ? need_bytes_bias  
+                           : (dma_load_cur_sel==SEL_SCALE)  ? need_bytes_scale : 32'd0;
+
+wire [15:0] need_beats_cur = need_bytes_cur >> LOG_BYTES_PER_BEAT;
+
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        payload_beats_need <= 0;
+        payload_beats_seen <= 0;
+    end else begin
+        if (dma_load_state == DMA_LOAD_SETUP) begin
+            payload_beats_need <= need_beats_cur;
+            payload_beats_seen <= 0;
+        end
+        else if (dma_load_state == DMA_LOAD_WAIT && axi_read_data_vld) begin
+            payload_beats_seen <= payload_beats_seen + 1'b1;
+        end
+
+        if (dma_ctrl_read_done) begin
+            payload_beats_need <= 0;
+            payload_beats_seen <= 0;
+        end
+    end
+end
+
+
+// q_load_* signal early OFF
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        q_load_ifm    <= 1'b0;
+        q_load_filter <= 1'b0;
+        q_load_bias   <= 1'b0;
+        q_load_scale  <= 1'b0;
+    end else begin
+        if (dma_load_state == DMA_LOAD_SETUP) begin
+            case (dma_load_cur_sel)
+                SEL_IFM:    q_load_ifm    <= 1'b1;
+                SEL_FILTER: q_load_filter <= 1'b1;
+                SEL_BIAS:   q_load_bias   <= 1'b1;
+                SEL_SCALE:  q_load_scale  <= 1'b1;
+            endcase
+        end
+
+        if (dma_load_state == DMA_LOAD_WAIT && payload_done_early) begin
+            case(dma_load_cur_sel)
+                SEL_IFM:    q_load_ifm    <= 1'b0;
+                SEL_FILTER: q_load_filter <= 1'b0;
+                SEL_BIAS:   q_load_bias   <= 1'b0;
+                SEL_SCALE:  q_load_scale  <= 1'b0;
+            endcase
+        end
+    end
+end
+
+
 //----------------------------------------------------------------
 // 5-1) DMA write
 //----------------------------------------------------------------
