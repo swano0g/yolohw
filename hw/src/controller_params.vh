@@ -31,10 +31,10 @@
 
 
 // CONTROLLER   
-`define W_SIZE          10              // MAX WIDTH 256    row, col
-`define W_CHANNEL       10              // MAX CHANNEL 512  chn
-`define W_FRAME_SIZE    (2 * `W_SIZE + `W_CHANNEL)
-`define W_DELAY         14              // MAX DELAY 2048
+`define W_SIZE              10              // MAX WIDTH 256    row, col
+`define W_CHANNEL           10              // MAX CHANNEL 512  chn
+`define W_FRAME_SIZE        (2 * `W_SIZE + `W_CHANNEL)
+`define W_DELAY             14              // MAX DELAY 2048
 
 
 // PE
@@ -90,6 +90,12 @@
 `define SCALE_DW                32
 `define SCALE_BUFFER_DEPTH      512
 `define SCALE_BUFFER_AW         $clog2(`SCALE_BUFFER_DEPTH)
+
+// maxpool
+`define MAXPOOL_BUFFER_DW       32
+`define MAXPOOL_BUFFER_DEPTH    128
+`define MAXPOOL_BUFFER_AW       $clog2(`MAXPOOL_BUFFER_DEPTH)
+
 
 
 `endif
