@@ -74,15 +74,21 @@ module postprocessor #(
     input  wire                         pe_is_first_chn_i,
     input  wire                         pe_is_last_chn_i, 
 
-    // postprocessor <-> buffer_manager
+    // postprocessor <-> buffer_manager, maxpool, upsample 
     output reg                          o_pp_data_vld,
     output reg  [OFM_DW-1:0]            o_pp_data,
-    output reg  [OFM_AW-1:0]            o_pp_addr
+    output reg  [OFM_AW-1:0]            o_pp_addr,
+
+    output wire [W_SIZE-1:0]            o_pp_row,
+    output wire [W_SIZE-1:0]            o_pp_col,
+    output wire [W_CHANNEL-1:0]         o_pp_chn_out
 );
 
 //============================================================================
 // I. signals & pipe
 //============================================================================
+localparam STG = 3;
+
 reg csync_d;
 reg pre_psync_d;
 reg post_psync_d;
@@ -114,7 +120,6 @@ wire [AFFINE_AW-1:0] scale_buf_read_addr;
 wire [AFFINE_DW-1:0] scale_buf_read_data;
 
 
-localparam STG = 3;
 
 reg [PE_ACCO_FLAT_BW-1:0]   data_pipe    [0:STG-1];
 reg                         vld_pipe     [0:STG-1];
@@ -156,7 +161,6 @@ always @(posedge clk or negedge rstn) begin
             pad_pipe[i] <= pad_pipe[i-1];            
         end
     end
-
 end
 
 
@@ -605,6 +609,27 @@ always @(posedge clk or negedge rstn) begin
         o_pp_addr        <= ofm_addr_pipe[2];
     end
 end
+
+//----------------------------------------------------------------------------
+reg [W_SIZE-1:0]    o_pp_row_r, o_pp_col_r;
+reg [W_CHANNEL-1:0] o_pp_chn_out_r;
+
+
+always @(posedge clk or negedge rstn) begin 
+    if (!rstn) begin 
+        o_pp_row_r <= 0;
+        o_pp_col_r <= 0;
+        o_pp_chn_out_r <= 0;
+    end else begin 
+        o_pp_row_r <= row_pipe[STG-1];
+        o_pp_col_r <= col_pipe[STG-1];
+        o_pp_chn_out_r <= chn_out_pipe[STG-1];
+    end
+end
+
+assign o_pp_row     = o_pp_data_vld ? o_pp_row_r : 0;
+assign o_pp_col     = o_pp_data_vld ? o_pp_col_r : 0;
+assign o_pp_chn_out = o_pp_data_vld ? o_pp_chn_out_r : 0;
 
 
 
