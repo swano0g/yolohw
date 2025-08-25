@@ -1,4 +1,3 @@
-`include "define.v"
 `include "controller_params.vh"
 
 //----------------------------------------------------------------+
@@ -7,7 +6,7 @@
 // Description:
 //		Load parameters and input feature map from DRAM via AXI4
 //
-// 2023.04.05 by NXT (truongnx@capp.snu.ac.kr)
+//
 //----------------------------------------------------------------+
 module yolo_engine #(
     parameter AXI_WIDTH_AD = 32,
@@ -22,35 +21,38 @@ module yolo_engine #(
     parameter MEM_DATA_BASE_ADDR = 4096,
 
 
-    parameter W_SIZE        = `W_SIZE,
-    parameter W_CHANNEL     = `W_CHANNEL,
-    parameter W_FRAME_SIZE  = `W_FRAME_SIZE,
-    parameter W_DELAY       = `W_DELAY,
-    parameter K                 = `K,
-    parameter Tin               = `Tin,
-    parameter Tout              = `Tout,
+    parameter W_SIZE                = `W_SIZE,
+    parameter W_CHANNEL             = `W_CHANNEL,
+    parameter W_FRAME_SIZE          = `W_FRAME_SIZE,
+    parameter W_DELAY               = `W_DELAY,
+    parameter K                     = `K,
+    parameter Tin                   = `Tin,
+    parameter Tout                  = `Tout,
 
-    parameter IFM_DW            = `IFM_DW,
-    parameter IFM_AW            = `FM_BUFFER_AW,
+    parameter IFM_DW                = `IFM_DW,
+    parameter IFM_AW                = `FM_BUFFER_AW,
 
-    parameter FILTER_DW         = `FILTER_DW,
-    parameter FILTER_AW         = `FILTER_BUFFER_AW,
+    parameter OFM_DW                = `FM_BUFFER_DW,
+    parameter OFM_AW                = `FM_BUFFER_AW,    
 
-    parameter PSUM_DW           = `W_PSUM,
-    parameter W_PSUM            = `W_PSUM,
-    parameter PE_IFM_FLAT_BW    = `PE_IFM_FLAT_BW,
-    parameter PE_FILTER_FLAT_BW = `PE_FILTER_FLAT_BW,
-    parameter PE_ACCO_FLAT_BW   = `PE_ACCO_FLAT_BW,
+    parameter FILTER_DW             = `FILTER_DW,
+    parameter FILTER_AW             = `FILTER_BUFFER_AW,
 
-    parameter TEST_COL          = 16,
-    parameter TEST_ROW          = 16, 
-    parameter TEST_T_CHNIN      = 4,
-    parameter TEST_T_CHNOUT     = 8,  
-    parameter TEST_FRAME_SIZE   = TEST_ROW * TEST_COL * TEST_T_CHNIN,
+    parameter PSUM_DW               = `W_PSUM,
+    parameter W_PSUM                = `W_PSUM,
+    parameter PE_IFM_FLAT_BW        = `PE_IFM_FLAT_BW,
+    parameter PE_FILTER_FLAT_BW     = `PE_FILTER_FLAT_BW,
+    parameter PE_ACCO_FLAT_BW       = `PE_ACCO_FLAT_BW,
 
-    parameter DRAM_FILTER_OFFSET = 4096,
-    parameter DRAM_BIAS_OFFSET   = DRAM_FILTER_OFFSET + 4608,
-    parameter DRAM_SCALE_OFFSET  = DRAM_BIAS_OFFSET + 128 
+    parameter TEST_COL              = 16,
+    parameter TEST_ROW              = 16, 
+    parameter TEST_T_CHNIN          = 4,
+    parameter TEST_T_CHNOUT         = 8,  
+    parameter TEST_FRAME_SIZE       = TEST_ROW * TEST_COL * TEST_T_CHNIN,
+
+    parameter DRAM_FILTER_OFFSET    = 4096,
+    parameter DRAM_BIAS_OFFSET      = DRAM_FILTER_OFFSET + 4608,
+    parameter DRAM_SCALE_OFFSET     = DRAM_BIAS_OFFSET + 128 
 
 )
 (
@@ -116,8 +118,6 @@ module yolo_engine #(
 );
 
 localparam BIT_TRANS = 18;
-
-
 
 //================================================================
 // 1) Parse control signals
@@ -307,8 +307,9 @@ reg  [W_CHANNEL-1:0]        q_channel_out;
 reg  [W_FRAME_SIZE-1:0]     q_frame_size;
 reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
 reg                         q_maxpool;
+reg                         q_upsample;
 
-reg                         q_c_ctrl_start; // cnn_ctrl start signal
+reg                         q_c_ctrl_start;  // cnn_ctrl start signal (q_start)
 reg                         q_load_ifm;
 reg                         q_load_filter;
 reg                         q_load_bias;
@@ -324,8 +325,6 @@ wire ofm_write_done;   // TODO: OFM writer 모듈 done 신호 연결
 wire layer_done;       // 이미 cnn_ctrl에서 나옴
 
 
-
-// wire [15:0] blk_read;
 reg [2:0] q_state;
 
 localparam 
@@ -335,12 +334,6 @@ localparam
     S_LOAD_CFG      = 3'd3,
     S_WAIT_CNN_CTRL = 3'd4;  // each layer
 
-
-
-
-// reg [9:0] idx_group;
-// reg phase_ifm;          //1: ifm phase, 0: weight phase
-// reg start_d1;
 
 
 always @(posedge clk or negedge rstn) begin
@@ -357,6 +350,7 @@ always @(posedge clk or negedge rstn) begin
         q_frame_size    <= 0;
         q_row_stride    <= 0;
         q_maxpool       <= 0;
+        q_upsample      <= 0;
 
         q_load_ifm <= 0;
         q_load_filter <= 0;
@@ -396,7 +390,7 @@ always @(posedge clk or negedge rstn) begin
                     q_channel_out   <= TEST_T_CHNOUT;  // 32 (8) 
                     q_frame_size    <= TEST_FRAME_SIZE;
                     q_row_stride    <= TEST_COL * TEST_T_CHNIN;
-                    q_maxpool       <= 0;
+                    q_maxpool       <= 1;
                     // 만약 레이어가 늘어나면 분기하는 로직이 필요함.
                     q_state <= S_LOAD_IFM;
                 end else begin 
@@ -459,8 +453,8 @@ wire [31:0]          dma_wr_base_addr;
 wire                    ctrl_read;
 wire                    read_done;
 wire [AXI_WIDTH_AD-1:0] read_addr;
-wire [AXI_WIDTH_DA-1:0] read_data;
-wire                    read_data_vld;
+wire [AXI_WIDTH_DA-1:0] axi_read_data;
+wire                    axi_read_data_vld;
 wire [BIT_TRANS   -1:0] read_data_cnt;
 
 // Signals for dma write
@@ -562,11 +556,7 @@ reg [31:0]          dma_scale_rd_base_addr;
 
 // d. dma_rd_max_req_blk_idx
 // total bytes / 64B
-reg [15:0]          dma_rd_max_req_blk_idx_r;  
-// reg [15:0]          dma_ifm_rd_max_req_blk_idx;  
-// reg [15:0]          dma_filter_rd_max_req_blk_idx; 
-// reg [15:0]          dma_bias_rd_max_req_blk_idx; 
-// reg [15:0]          dma_scale_rd_max_req_blk_idx; 
+reg [15:0]          dma_rd_max_req_blk_idx_r; 
 
 
 
@@ -620,17 +610,13 @@ assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
 // -----------------------------------------------------------------------------
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
-        dma_load_state     <= DMA_LOAD_IDLE;
-        dma_load_cur_sel   <= SEL_NONE;
-        in_load_affine_phase <= 0;
+        dma_load_state           <= DMA_LOAD_IDLE;
+        dma_load_cur_sel         <= SEL_NONE;
+        in_load_affine_phase     <= 0;
 
-        dma_load_kicked   <= 1'b0;
-        dma_load_rd_go_pulse <= 1'b0;
+        dma_load_kicked          <= 1'b0;
+        dma_load_rd_go_pulse     <= 1'b0;
 
-        // dma_ifm_rd_base_addr    <= 0;
-        // dma_filter_rd_base_addr <= 0;
-        // dma_bias_rd_base_addr   <= 0;
-        // dma_scale_rd_base_addr  <= 0;
 
         dma_ifm_load_done_reg    <= 0;
         dma_filter_load_done_reg <= 0;
@@ -639,7 +625,7 @@ always @(posedge clk or negedge rstn) begin
 
     end else begin
         // defaults (pulse)
-        dma_load_rd_go_pulse <= 1'b0;
+        dma_load_rd_go_pulse     <= 1'b0;
         dma_ifm_load_done_reg    <= 0;
         dma_filter_load_done_reg <= 0;
         dma_bias_load_done_reg   <= 0;
@@ -766,32 +752,32 @@ end
 //----------------------------------------------------------------
 axi_dma_ctrl #(.BIT_TRANS(BIT_TRANS))
 u_dma_ctrl(
-    .clk              (clk              ),
-    .rstn             (rstn             ),
+    .clk                  (clk                    ),
+    .rstn                 (rstn                   ),
 
     // ----------- READ PLANE -----------
-    .i_rd_start       (dma_rd_go        ),
-    .i_rd_base_addr   (dma_rd_base_addr ), 
-    .i_rd_num_trans   (dma_rd_num_trans ), // transaction needed (사실상 16 고정)
-    .i_rd_max_req_blk_idx(dma_rd_max_req_blk_idx), // 읽을 블록 개수
-    .o_ctrl_read_done (dma_ctrl_read_done),
+    .i_rd_start           (dma_rd_go              ),
+    .i_rd_base_addr       (dma_rd_base_addr       ), 
+    .i_rd_num_trans       (dma_rd_num_trans       ), // transaction needed (사실상 16 고정)
+    .i_rd_max_req_blk_idx (dma_rd_max_req_blk_idx ), // 읽을 블록 개수
+    .o_ctrl_read_done     (dma_ctrl_read_done     ),
 
     // DMA Read
-    .i_read_done      (read_done        ),
-    .o_ctrl_read      (ctrl_read        ), //when to read
-    .o_read_addr      (read_addr        ), //where
+    .i_read_done          (read_done              ),
+    .o_ctrl_read          (ctrl_read              ), //when to read
+    .o_read_addr          (read_addr              ), //where
 
     // ----------- WRITE PLANE ----------
-    .i_wr_start       (dma_wr_go        ),
-    .i_wr_base_addr   (dma_wr_base_addr ), //dram write address
-    .i_indata_req_wr  (indata_req_wr    ),
-    .o_ctrl_write_done(ctrl_write_done  ),
+    .i_wr_start           (dma_wr_go              ),
+    .i_wr_base_addr       (dma_wr_base_addr       ), //dram write address
+    .i_indata_req_wr      (indata_req_wr          ),
+    .o_ctrl_write_done    (ctrl_write_done        ),
 
     // DMA Write
-    .i_write_done     (write_done       ),
-    .o_ctrl_write     (ctrl_write       ), //when to write
-    .o_write_addr     (write_addr       ),
-    .o_write_data_cnt (write_data_cnt   )
+    .i_write_done         (write_done             ),
+    .o_ctrl_write         (ctrl_write             ), //when to write
+    .o_write_addr         (write_addr             ),
+    .o_write_data_cnt     (write_data_cnt         )
 );
 
 
@@ -832,18 +818,18 @@ u_dma_read(
     .M_RRESP	(M_RRESP	  ),  // Read response
      
     //Functional Ports
-    .start_dma	(ctrl_read    ),
-    .num_trans	(num_trans    ), // Number of 128-bit words transferred
-    .start_addr	(read_addr    ), // iteration_num * 4 * 16 + read_address_d	
+    .start_dma	(ctrl_read          ),
+    .num_trans	(num_trans          ), // Number of 128-bit words transferred
+    .start_addr	(read_addr          ), // iteration_num * 4 * 16 + read_address_d	
     //to bram
-    .data_o		(read_data    ),
-    .data_vld_o	(read_data_vld),
-    .data_cnt_o	(read_data_cnt),
-    .done_o		(read_done    ),
+    .data_o		(axi_read_data      ),
+    .data_vld_o	(axi_read_data_vld  ),
+    .data_cnt_o	(read_data_cnt      ),
+    .done_o		(read_done          ),
 
     //Global signals
-    .clk        (clk          ),
-    .rstn       (rstn         )
+    .clk        (clk                ),
+    .rstn       (rstn               )
 );
 
 // DMA write module
@@ -902,8 +888,6 @@ u_dma_write(
 // 
 //--------------------------------------------------------------------
 // 연결선
-wire                        load_filter_done;
-
 
 // BM <-> PE (IFM/FILTER)
 wire [IFM_DW-1:0]           ifm_data_0, ifm_data_1, ifm_data_2;
@@ -912,32 +896,33 @@ wire                        fb_req_possible;
 wire [FILTER_AW-1:0]        fb_addr;
 wire [FILTER_DW-1:0]        filter_data_0, filter_data_1, filter_data_2, filter_data_3;
 
+    
 // ctrl
-wire                     pb_sync_done;
+wire                        bm_ofm_sync_done;  // ofm save done
 
 //
 
-wire                     ctrl_csync_run;
-wire                     ctrl_psync_run;
-wire                     ctrl_data_run;
-wire                     ctrl_psync_phase;
-wire [W_SIZE-1:0]        row;
-wire [W_SIZE-1:0]        col;
-wire [W_CHANNEL-1:0]     chn;
-wire [W_CHANNEL-1:0]     chn_out;
+wire                        ctrl_csync_run;
+wire                        ctrl_psync_run;
+wire                        ctrl_data_run;
+wire                        ctrl_psync_phase;
+wire [W_SIZE-1:0]           row;
+wire [W_SIZE-1:0]           col;
+wire [W_CHANNEL-1:0]        chn;
+wire [W_CHANNEL-1:0]        chn_out;
 
-wire                     fb_load_req;
+wire                        fb_load_req;
 
-wire                     is_first_row;
-wire                     is_last_row;
-wire                     is_first_col;
-wire                     is_last_col; 
-wire                     is_first_chn;
-wire                     is_last_chn; 
+wire                        is_first_row;
+wire                        is_last_row;
+wire                        is_first_col;
+wire                        is_last_col; 
+wire                        is_first_chn;
+wire                        is_last_chn; 
 
-// wire                     layer_done;
-wire                     bm_csync_done;
-wire                     pe_csync_done;
+wire                        layer_done;
+wire                        bm_csync_done;
+wire                        pe_csync_done;
 
 // pe -> postprocessor 연결선 
 wire [PE_ACCO_FLAT_BW-1:0]  pe_data;
@@ -948,181 +933,235 @@ wire [W_CHANNEL-1:0]        pe_chn;
 wire [W_CHANNEL-1:0]        pe_chn_out;
 wire                        pe_is_last_chn; 
 
+// postprocessor
 wire                        pp_load_done;
+// pp -> buffer manager
+wire                        pp_data_vld;
+wire [OFM_DW-1:0]           pp_data;
+wire [OFM_AW-1:0]           pp_addr;
+
+wire [W_SIZE-1:0]           pp_row;
+wire [W_SIZE-1:0]           pp_col;
+wire [W_CHANNEL-1:0]        pp_chn_out;
+
+// maxpool
+wire                        mp_data_vld;
+wire  [OFM_DW-1:0]          mp_data;
+wire  [OFM_AW-1:0]          mp_addr;
+
+// ofm mux
+wire                        mux_ofm_data_vld = q_maxpool ? mp_data_vld : pp_data_vld;
+wire  [OFM_DW-1:0]          mux_ofm_data     = q_maxpool ? mp_data     : pp_data;
+wire  [OFM_AW-1:0]          mux_ofm_addr     = q_maxpool ? mp_addr     : pp_addr;
 
 
 //---------------------------------------------------------------------- 
 cnn_ctrl u_cnn_ctrl (
-    .clk               (clk               ),
-    .rstn              (rstn              ),
+    .clk               (clk                 ),
+    .rstn              (rstn                ),
     // Inputs
-    .q_width           (q_width           ),
-    .q_height          (q_height          ),
-    .q_channel         (q_channel         ),
-    .q_channel_out     (q_channel_out     ),
-    .q_frame_size      (q_frame_size      ),
-    .q_start           (q_c_ctrl_start    ),
+    .q_width           (q_width             ),
+    .q_height          (q_height            ),
+    .q_channel         (q_channel           ),
+    .q_channel_out     (q_channel_out       ),
+    .q_frame_size      (q_frame_size        ),
+    .q_start           (q_c_ctrl_start      ),
+    
+    .bm_csync_done     (bm_csync_done       ),
+    .pe_csync_done     (pe_csync_done       ),
 
-    .bm_csync_done     (bm_csync_done     ),
-    .pe_csync_done     (pe_csync_done     ),
-
-    .pp_load_done      (pp_load_done      ),
-    .pb_sync_done      (pb_sync_done      ),
+    .pp_load_done      (pp_load_done        ),
+    .ofm_sync_done     (bm_ofm_sync_done    ),
+    
     // Outputs
-    .o_ctrl_csync_run  (ctrl_csync_run    ),
-    .o_ctrl_psync_run  (ctrl_psync_run    ),
-    .o_ctrl_data_run   (ctrl_data_run     ),
-    .o_ctrl_psync_phase(ctrl_psync_phase  ),
-    .o_is_first_row    (is_first_row      ),
-    .o_is_last_row     (is_last_row       ),
-    .o_is_first_col    (is_first_col      ),
-    .o_is_last_col     (is_last_col       ),
-    .o_is_first_chn    (is_first_chn      ),
-    .o_is_last_chn     (is_last_chn       ),
-    .o_row             (row               ),
-    .o_col             (col               ),
-    .o_chn             (chn               ),
-    .o_chn_out         (chn_out           ),
-    .o_fb_load_req     (fb_load_req       ),
-    .o_layer_done      (layer_done        )
+    .o_ctrl_csync_run  (ctrl_csync_run      ),
+    .o_ctrl_psync_run  (ctrl_psync_run      ),
+    .o_ctrl_data_run   (ctrl_data_run       ),
+    .o_ctrl_psync_phase(ctrl_psync_phase    ),
+    .o_is_first_row    (is_first_row        ),
+    .o_is_last_row     (is_last_row         ),
+    .o_is_first_col    (is_first_col        ),
+    .o_is_last_col     (is_last_col         ),
+    .o_is_first_chn    (is_first_chn        ),
+    .o_is_last_chn     (is_last_chn         ),
+    .o_row             (row                 ),
+    .o_col             (col                 ),
+    .o_chn             (chn                 ),
+    .o_chn_out         (chn_out             ),
+    .o_fb_load_req     (fb_load_req         ),
+    .o_layer_done      (layer_done          )
 );
-//--------------------------------------------------------------------
+//---------------------------------------------------------------------- 
 buffer_manager u_buffer_manager (
-    .clk                (clk              ),
-    .rstn               (rstn             ),
+    .clk                (clk                ),
+    .rstn               (rstn               ),
 
     // Buffer Manager <-> TOP
-    .q_width            (q_width          ),
-    .q_height           (q_height         ),
-    .q_channel          (q_channel        ),
-    .q_row_stride       (q_row_stride     ),
+    .q_width            (q_width            ),
+    .q_height           (q_height           ),
+    .q_channel          (q_channel          ),
+    .q_channel_out      (q_channel_out      ),
+    .q_row_stride       (q_row_stride       ),
 
-    // .q_layer            (q_layer          ),
+    .q_maxpool          (q_maxpool          ),
+    .q_upsample         (q_upsample         ),
 
-    .q_load_ifm         (q_load_ifm       ),
-    .q_load_filter      (q_load_filter    ),
-    .o_load_filter_done (load_filter_done ),
+    .q_load_ifm         (q_load_ifm         ),
+    .q_load_filter      (q_load_filter      ),
 
     // Buffer Manager <-> AXI (IFM/FILTER)
-    .read_data          (read_data        ),
-    .read_data_vld      (read_data_vld    ),
+    .read_data          (axi_read_data      ),
+    .read_data_vld      (axi_read_data_vld  ),
 
     // Buffer Manager <-> Controller 
-    .c_ctrl_data_run    (ctrl_data_run    ),
-    .c_ctrl_csync_run   (ctrl_csync_run   ),
-    .c_row              (row              ),
-    .c_col              (col              ),
-    .c_chn              (chn              ),
+    .c_ctrl_data_run    (ctrl_data_run      ),
+    .c_ctrl_csync_run   (ctrl_csync_run     ),
+    .c_row              (row                ),
+    .c_col              (col                ),
+    .c_chn              (chn                ),
 
-    .c_is_first_row     (is_first_row     ),
-    .c_is_last_row      (is_last_row      ),
-    .c_is_first_col     (is_first_col     ),
-    .c_is_last_col      (is_last_col      ),
-    .c_is_first_chn     (is_first_chn     ),
-    .c_is_last_chn      (is_last_chn      ),
+    .c_is_first_row     (is_first_row       ),
+    .c_is_last_row      (is_last_row        ),
+    .c_is_first_col     (is_first_col       ),
+    .c_is_last_col      (is_last_col        ),
+    .c_is_first_chn     (is_first_chn       ),
+    .c_is_last_chn      (is_last_chn        ),
 
-    .o_bm_csync_done    (bm_csync_done    ),
+    .o_bm_csync_done    (bm_csync_done      ),
+    .o_bm_ofm_sync_done (bm_ofm_sync_done   ),
 
     // Buffer Manager <-> pe_engine (IFM)
-    .ib_data0_out       (ifm_data_0       ),
-    .ib_data1_out       (ifm_data_1       ),
-    .ib_data2_out       (ifm_data_2       ),
+    .ib_data0_out       (ifm_data_0         ),
+    .ib_data1_out       (ifm_data_1         ),
+    .ib_data2_out       (ifm_data_2         ),
 
     // Buffer Manager <-> pe_engine (FILTER)
-    .fb_req_possible    (fb_req_possible  ),
-    .fb_req             (fb_req           ),
-    .fb_addr            (fb_addr          ),
+    .fb_req_possible    (fb_req_possible    ),
+    .fb_req             (fb_req             ),
+    .fb_addr            (fb_addr            ),
 
-    .fb_data0_out       (filter_data_0    ),
-    .fb_data1_out       (filter_data_1    ),
-    .fb_data2_out       (filter_data_2    ),
-    .fb_data3_out       (filter_data_3    )
+    .fb_data0_out       (filter_data_0      ),
+    .fb_data1_out       (filter_data_1      ),
+    .fb_data2_out       (filter_data_2      ),
+    .fb_data3_out       (filter_data_3      ),
+
+    // Buffer Manager <-> post processor or max pooling module
+    .ofm_data_vld       (mux_ofm_data_vld   ),
+    .ofm_data           (mux_ofm_data       ),
+    .ofm_addr           (mux_ofm_addr       )
 );
 //---------------------------------------------------------------------- 
 pe_engine u_pe_engine (
-    .clk                (clk            ), 
-    .rstn               (rstn           ),
-    .c_ctrl_data_run    (ctrl_data_run  ),
-    .c_ctrl_csync_run   (ctrl_csync_run ),
-    .c_row              (row            ),
-    .c_col              (col            ),
-    .c_chn              (chn            ),
-    .c_chn_out          (chn_out        ),
-    .c_is_first_row     (is_first_row   ),
-    .c_is_last_row      (is_last_row    ),
-    .c_is_first_col     (is_first_col   ),
-    .c_is_last_col      (is_last_col    ),
-    .c_is_first_chn     (is_first_chn   ),
-    .c_is_last_chn      (is_last_chn    ),
+    .clk                (clk                ), 
+    .rstn               (rstn               ),
+    .c_ctrl_data_run    (ctrl_data_run      ),
+    .c_ctrl_csync_run   (ctrl_csync_run     ),
+    .c_row              (row                ),
+    .c_col              (col                ),
+    .c_chn              (chn                ),
+    .c_chn_out          (chn_out            ),
+    .c_is_first_row     (is_first_row       ),
+    .c_is_last_row      (is_last_row        ),
+    .c_is_first_col     (is_first_col       ),
+    .c_is_last_col      (is_last_col        ),
+    .c_is_first_chn     (is_first_chn       ),
+    .c_is_last_chn      (is_last_chn        ),
 
-    .q_channel          (q_channel      ),
+    .q_channel          (q_channel          ),
 
-    .o_pe_csync_done    (pe_csync_done  ),
+    .o_pe_csync_done    (pe_csync_done      ),
     
-    .ib_data0_in        (ifm_data_0     ), 
-    .ib_data1_in        (ifm_data_1     ), 
-    .ib_data2_in        (ifm_data_2     ),
+    .ib_data0_in        (ifm_data_0         ), 
+    .ib_data1_in        (ifm_data_1         ), 
+    .ib_data2_in        (ifm_data_2         ),
     
-    .fb_req_possible    (fb_req_possible),
-    .o_fb_req           (fb_req         ),
-    .o_fb_addr          (fb_addr        ),
+    .fb_req_possible    (fb_req_possible    ),
+    .o_fb_req           (fb_req             ),
+    .o_fb_addr          (fb_addr            ),
 
-    .fb_data0_in        (filter_data_0  ),
-    .fb_data1_in        (filter_data_1  ),
-    .fb_data2_in        (filter_data_2  ),
-    .fb_data3_in        (filter_data_3  ),
+    .fb_data0_in        (filter_data_0      ),
+    .fb_data1_in        (filter_data_1      ),
+    .fb_data2_in        (filter_data_2      ),
+    .fb_data3_in        (filter_data_3      ),
 
     // pe_engine -> postprocessor
-    .o_pe_data          (pe_data        ),
-    .o_pe_vld           (pe_vld         ), 
-    .o_pe_row           (pe_row         ),
-    .o_pe_col           (pe_col         ),
-    .o_pe_chn           (pe_chn         ),
-    .o_pe_chn_out       (pe_chn_out     ),
-    .o_pe_is_last_chn   (pe_is_last_chn ) 
+    .o_pe_data          (pe_data            ),
+    .o_pe_vld           (pe_vld             ), 
+    .o_pe_row           (pe_row             ),
+    .o_pe_col           (pe_col             ),
+    .o_pe_chn           (pe_chn             ),
+    .o_pe_chn_out       (pe_chn_out         ),
+    .o_pe_is_first_chn  (pe_is_first_chn    ),
+    .o_pe_is_last_chn   (pe_is_last_chn     ) 
 );
-//----------------------------------------------------------------------  
+//---------------------------------------------------------------------- 
 postprocessor u_postprocessor (
-    .clk                (clk            ),
-    .rstn               (rstn           ),
+    .clk                (clk                ),
+    .rstn               (rstn               ),
 
     // postprocessor <-> top
-    .q_width            (q_width        ),
-    .q_height           (q_height       ),
-    .q_channel          (q_channel      ),
-    .q_channel_out      (q_channel_out  ),
+    .q_width            (q_width            ),
+    .q_height           (q_height           ),
+    .q_channel          (q_channel          ),
+    .q_channel_out      (q_channel_out      ),
 
-    .q_load_bias        (q_load_bias    ),
-    .q_load_scale       (q_load_scale   ),
+
+    .q_load_bias        (q_load_bias        ),
+    .q_load_scale       (q_load_scale       ),
 
     // postprocessor <-> ctrl
-    .c_ctrl_csync_run   (ctrl_csync_run ),
-    .c_ctrl_psync_run   (ctrl_psync_run ),
-    .c_ctrl_psync_phase (ctrl_psync_phase),
+    .c_ctrl_csync_run   (ctrl_csync_run     ),
+    .c_ctrl_psync_run   (ctrl_psync_run     ),
+    .c_ctrl_psync_phase (ctrl_psync_phase   ),
 
-    .c_ctrl_chn_out     (chn_out        ),
+    .c_ctrl_chn_out     (chn_out            ),
 
-
-    .o_pp_load_done     (pp_load_done   ),
-    .o_pb_sync_done     (pb_sync_done   ),
+    .o_pp_load_done     (pp_load_done       ),
 
     // postprocessor <-> AXI
-    .read_data          (read_data      ),
-    .read_data_vld      (read_data_vld  ),
+    .read_data          (axi_read_data      ),
+    .read_data_vld      (axi_read_data_vld  ),
 
     // postprocessor <-> pe_engine
-    .pe_data_i          (pe_data        ),
-    .pe_vld_i           (pe_vld         ), 
-    .pe_row_i           (pe_row         ),
-    .pe_col_i           (pe_col         ),
-    .pe_chn_i           (pe_chn         ),
-    .pe_chn_out_i       (pe_chn_out     ),
-    .pe_is_last_chn     (pe_is_last_chn ), 
+    .pe_data_i          (pe_data            ),
+    .pe_vld_i           (pe_vld             ), 
+    .pe_row_i           (pe_row             ),
+    .pe_col_i           (pe_col             ),
+    .pe_chn_i           (pe_chn             ),
+    .pe_chn_out_i       (pe_chn_out         ),
+    .pe_is_first_chn_i  (pe_is_first_chn    ),
+    .pe_is_last_chn_i   (pe_is_last_chn     ),
 
     // postprocessor <-> buffer_manager
-    .o_pp_data_vld      (       ),
-    .o_pp_data          (       ),
-    .o_pp_addr          (       )
+    .o_pp_data_vld      (pp_data_vld        ),
+    .o_pp_data          (pp_data            ),
+    .o_pp_addr          (pp_addr            ),
+
+    .o_pp_row           (pp_row             ),
+    .o_pp_col           (pp_col             ),
+    .o_pp_chn_out       (pp_chn_out         )
+);
+//----------------------------------------------------------------------  
+maxpool u_maxpool (
+    .clk                (clk                ),
+    .rstn               (rstn               ),
+
+    // maxpool <-> top
+    .q_width            (q_width            ),
+    .q_height           (q_height           ),
+    .q_channel_out      (q_channel_out      ),
+
+    // maxpool <-> postprocessor
+    .pp_data_vld        (pp_data_vld        ),
+    .pp_data            (pp_data            ),
+    .pp_row             (pp_row             ), 
+    .pp_col             (pp_col             ), 
+    .pp_chn_out         (pp_chn_out         ),
+
+    // maxpool <-> buffer manager
+    .o_mp_data_vld      (mp_data_vld        ),
+    .o_mp_data          (mp_data            ),
+    .o_mp_addr          (mp_addr            )
 );
 
 

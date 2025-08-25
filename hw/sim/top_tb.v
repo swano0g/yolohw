@@ -761,7 +761,7 @@ module top_tb;
         integer exp_words;
         integer errors, checks;
         integer max_print, printed;
-        reg [W_PSUM-1:0] got, exp;
+        reg [OFM_DW-1:0] got, exp;
         
         begin
             errors    = 0;
@@ -814,7 +814,7 @@ module top_tb;
             checks    = 0;
             max_print = 50;
             printed   = 0;
-            exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
+            exp_words = TEST_ROW/2 * TEST_COL/2 * TEST_T_CHNOUT;
             $display("============================================================");
             $display("MAXPOOL CHECK START");
 

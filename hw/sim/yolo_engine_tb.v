@@ -9,7 +9,7 @@ module yolo_engine_tb;
 // `define TESTCASE_2 1
 
 
-`include "define.v"
+// `include "define.v"
 `include "sim_cfg.vh"
 
 localparam MEM_ADDRW = 22;
@@ -274,20 +274,73 @@ end
 // Compare output
 //--------------------------------------------------------------------
 `include "controller_params.vh"
-
-reg  [`PSUM_DW-1:0]          expect      [0:65536-1];
+reg  [`PSUM_DW-1:0]          expect_conv [0:65536-1];
+reg  [`OFM_DW-1:0]           expect_aff  [0:65536-1];
+reg  [`OFM_DW-1:0]           expect_mp   [0:65536-1];
         
-initial begin    
-    $readmemh(`TEST_EXP_CONV_PATH, expect);
+initial begin 
+    $readmemh(`TEST_EXP_CONV_PATH, expect_conv);
+    $readmemh(`TEST_EXP_AFFINE_PATH, expect_aff);
+    $readmemh(`TEST_EXP_MAXPOOL_PATH, expect_mp);
 end
 
 
-task automatic tb_check_psum_vs_expect;
+// ------- capture signals -------
+reg [`PSUM_DW-1:0] cap_pe_mem [0:65536-1];
+reg [`OFM_DW-1:0]  cap_pp_mem [0:65536-1];
+reg [`OFM_DW-1:0]  cap_mp_mem [0:65536-1];
+
+wire [`PSUM_DW-1:0]  cap_pe_data0 = u_yolo_engine.pe_data[0*`PSUM_DW+:`PSUM_DW];
+wire [`PSUM_DW-1:0]  cap_pe_data1 = u_yolo_engine.pe_data[1*`PSUM_DW+:`PSUM_DW];
+wire [`PSUM_DW-1:0]  cap_pe_data2 = u_yolo_engine.pe_data[2*`PSUM_DW+:`PSUM_DW];
+wire [`PSUM_DW-1:0]  cap_pe_data3 = u_yolo_engine.pe_data[3*`PSUM_DW+:`PSUM_DW];
+
+
+wire                        cap_pp_vld  = u_yolo_engine.pp_data_vld;
+wire [`OFM_DW-1:0]          cap_pp_data = u_yolo_engine.pp_data;
+wire [`FM_BUFFER_AW-1:0]    cap_pp_addr = u_yolo_engine.pp_addr;
+
+wire                        cap_mp_vld  = u_yolo_engine.mp_data_vld;
+wire [`OFM_DW-1:0]          cap_mp_data = u_yolo_engine.mp_data;
+wire [`FM_BUFFER_AW-1:0]    cap_mp_addr = u_yolo_engine.mp_addr;
+
+integer base_addr_cap;
+integer i;
+
+always @(posedge clk) begin
+    if (!rstn) begin
+        base_addr_cap <= 0;
+        for (i = 0; i < 65536; i = i + 1) begin 
+            cap_pe_mem[i] <= 0;
+        end
+    end
+    else begin 
+        if (u_yolo_engine.pe_vld) begin 
+            base_addr_cap =  (u_yolo_engine.pe_row * u_yolo_engine.q_width + u_yolo_engine.pe_col) * (u_yolo_engine.q_channel_out<<2) + u_yolo_engine.pe_chn_out * `Tout;
+            
+            cap_pe_mem[base_addr_cap + 0] <= $signed(cap_pe_mem[base_addr_cap + 0]) + $signed(cap_pe_data0);
+            cap_pe_mem[base_addr_cap + 1] <= $signed(cap_pe_mem[base_addr_cap + 1]) + $signed(cap_pe_data1);
+            cap_pe_mem[base_addr_cap + 2] <= $signed(cap_pe_mem[base_addr_cap + 2]) + $signed(cap_pe_data2);
+            cap_pe_mem[base_addr_cap + 3] <= $signed(cap_pe_mem[base_addr_cap + 3]) + $signed(cap_pe_data3);
+        end
+
+        if (cap_pp_vld) begin
+            cap_pp_mem[cap_pp_addr] <= cap_pp_data;
+        end
+
+        if (cap_mp_vld) begin 
+            cap_mp_mem[cap_mp_addr] <= cap_mp_data;
+        end
+    end
+end
+// -------------------------------
+
+task automatic tb_check_conv_result;
     integer i;
     integer exp_words;
     integer errors, checks;
     integer max_print, printed;
-    reg [`W_PSUM-1:0] got, exp;
+    reg [`PSUM_DW-1:0] got, exp;
     
     begin
         errors    = 0;
@@ -295,10 +348,12 @@ task automatic tb_check_psum_vs_expect;
         max_print = 50;
         printed   = 0;
         exp_words = `TEST_ROW * `TEST_COL * `TEST_CHNOUT;
+        $display("============================================================");
+        $display("CONV CHECK START");
 
         for (i = 0; i < exp_words; i = i + 1) begin
-            got = u_yolo_engine.u_postprocessor.psumbuf[i]; 
-            exp = expect[i]; 
+            got = cap_pe_mem[i]; 
+            exp = expect_conv[i]; 
             if (got !== exp) begin
                 errors = errors + 1;
                 if (printed < max_print) begin
@@ -312,16 +367,108 @@ task automatic tb_check_psum_vs_expect;
 
         // --------- summary ---------
         $display("------------------------------------------------------------");
-        $display("PSUM CHECK SUMMARY @%0t", $time);
+        $display("CONV CHECK SUMMARY @%0t", $time);
         $display("  total=%0d  match=%0d  errors=%0d",
                 checks, checks - errors, errors);
-        $display("------------------------------------------------------------");
         if (errors == 0) begin
             $display("RESULT: PASS");
-            $finish;
         end else begin
             $display("RESULT: FAIL");
         end
+        $display("============================================================");
+        // -----------------------------------------------
+
+    end
+endtask
+
+
+task automatic tb_check_affine_result;
+    integer i;
+    integer exp_words;
+    integer errors, checks;
+    integer max_print, printed;
+    reg [`OFM_DW-1:0] got, exp;
+    
+    begin
+        errors    = 0;
+        checks    = 0;
+        max_print = 50;
+        printed   = 0;
+        exp_words = `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
+        $display("============================================================");
+        $display("AFFINE CHECK START");
+
+        for (i = 0; i < exp_words; i = i + 1) begin
+            got = cap_pp_mem[i]; 
+            exp = expect_aff[i]; 
+            if (got !== exp) begin
+                errors = errors + 1;
+                if (printed < max_print) begin
+                    $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
+                            $time, i, got, exp);
+                    printed = printed + 1;
+                end
+            end
+            checks = checks + 1;
+        end
+
+        // --------- summary ---------
+        $display("------------------------------------------------------------");
+        $display("AFFINE CHECK SUMMARY @%0t", $time);
+        $display("  total=%0d  match=%0d  errors=%0d",
+                checks, checks - errors, errors);
+        if (errors == 0) begin
+            $display("RESULT: PASS");
+        end else begin
+            $display("RESULT: FAIL");
+        end
+        $display("============================================================");
+        // -----------------------------------------------
+    end
+endtask
+
+
+task automatic tb_check_maxpool_result;
+    integer i;
+    integer exp_words;
+    integer errors, checks;
+    integer max_print, printed;
+    reg [`OFM_DW-1:0] got, exp;
+    
+    begin
+        errors    = 0;
+        checks    = 0;
+        max_print = 50;
+        printed   = 0;
+        exp_words = `TEST_ROW/2 * `TEST_COL/2 * `TEST_T_CHNOUT;
+        $display("============================================================");
+        $display("MAXPOOL CHECK START");
+
+        for (i = 0; i < exp_words; i = i + 1) begin
+            got = cap_mp_mem[i]; 
+            exp = expect_mp[i]; 
+            if (got !== exp) begin
+                errors = errors + 1;
+                if (printed < max_print) begin
+                    $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
+                            $time, i, got, exp);
+                    printed = printed + 1;
+                end
+            end
+            checks = checks + 1;
+        end
+
+        // --------- summary ---------
+        $display("------------------------------------------------------------");
+        $display("MAXPOOL CHECK SUMMARY @%0t", $time);
+        $display("  total=%0d  match=%0d  errors=%0d",
+                checks, checks - errors, errors);
+        if (errors == 0) begin
+            $display("RESULT: PASS");
+        end else begin
+            $display("RESULT: FAIL");
+        end
+        $display("============================================================");
         // -----------------------------------------------
 
     end
@@ -332,10 +479,13 @@ initial checked_done = 1'b0;
 
 always @(posedge clk) begin
     if (network_done && !checked_done) begin
+        @(posedge clk);
+        @(posedge clk);
+        tb_check_conv_result();
+        tb_check_affine_result();
+        tb_check_maxpool_result();
+        @(posedge clk);
         checked_done <= 1'b1;
-        @(posedge clk);
-        @(posedge clk);
-        tb_check_psum_vs_expect();
     end
 end
 
