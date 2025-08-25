@@ -30,6 +30,7 @@ class TCParams:
     out_maxpool_result_hex: Path
     out_upsample_result_hex: Path
     out_golden_hex: Path
+    out_memory_hex: Path
     
     
     
@@ -89,14 +90,17 @@ def load_params(args_path: Path) -> TCParams:
     out_feamap_dir       = _abs_path(Path("hw") / "inout_data" / "feamap")
     out_param_packed_dir = _abs_path(Path("hw") / "inout_data" / "param_packed")
     out_expect_dir       = _abs_path(Path("hw") / "inout_data" / "expect")
+    out_dram_dir         = _abs_path(Path("hw") / "inout_data" / "dram")
 
     out_feamap_dir.mkdir(parents=True, exist_ok=True)
     out_param_packed_dir.mkdir(parents=True, exist_ok=True)
     out_expect_dir.mkdir(parents=True, exist_ok=True)
+    out_dram_dir.mkdir(parents=True, exist_ok=True)
 
     out_ifm_hex    = out_feamap_dir       / f"test{tc_no}_input_32b.hex"
     out_weight_hex = out_param_packed_dir / f"test{tc_no}_param_packed_weight.hex"
     out_affine_hex = out_param_packed_dir / f"test{tc_no}_affine_param.hex"
+    out_memory_hex = out_dram_dir         / f"test{tc_no}_memory_16b.hex"
     
     out_conv_result_hex = out_expect_dir     / f"test{tc_no}_conv_result_32b.hex"
     out_affine_result_hex = out_expect_dir   / f"test{tc_no}_affine_result_32b.hex"
@@ -121,6 +125,7 @@ def load_params(args_path: Path) -> TCParams:
         out_maxpool_result_hex=out_maxpool_result_hex,
         out_upsample_result_hex=out_upsample_result_hex,
         out_golden_hex=out_golden_hex,
+        out_memory_hex=out_memory_hex,
     )
     
 

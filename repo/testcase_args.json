@@ -1,9 +1,9 @@
 {
-    "testcase_no": 2,
+    "testcase_no": 1,
     "width": 16,
     "height": 16,
-    "cin": 8,
-    "cout": 16,
+    "cin": 16,
+    "cout": 32,
     "ifm_hex":    "repo\\data\\CONV04_input_32b.hex",
     "filter_hex": "repo\\data\\CONV04_param_weight.hex",
     "bias_hex":   "repo\\data\\CONV04_param_biases.hex",
