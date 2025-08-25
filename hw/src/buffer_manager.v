@@ -33,29 +33,29 @@ module buffer_manager #(
     // AXI
     parameter AXI_WIDTH_DA = `AXI_WIDTH_DA
 )(
-    input  wire               clk,
-    input  wire               rstn,
+    input  wire                         clk,
+    input  wire                         rstn,
 
     // Buffer Manager <-> TOP
-    input  wire [W_SIZE-1:0]        q_width,
-    input  wire [W_SIZE-1:0]        q_height,
-    input  wire [W_CHANNEL-1:0]     q_channel,   // TILED input channel
-    input  wire [W_SIZE+W_CHANNEL-1:0] q_row_stride, // q_width * q_channel
+    input  wire [W_SIZE-1:0]            q_width,
+    input  wire [W_SIZE-1:0]            q_height,
+    input  wire [W_CHANNEL-1:0]         q_channel,   
+    input  wire [W_CHANNEL-1:0]         q_channel_out,
+    input  wire [W_SIZE+W_CHANNEL-1:0]  q_row_stride,   // q_width * q_channel
 
-    // input  wire [4:0]               q_layer,            // 몇번째 레이어인지 -> filter load할때 사용 ?
+    input  wire                         q_maxpool,
+    input  wire                         q_upsample,
 
-    input  wire                     q_load_ifm,             // ifm load start
-
-    input  wire                     q_load_filter,          // filter 로드 시작 시그널
-    output wire                     o_load_filter_done,     // filter 로드 완료 시그널
+    input  wire                         q_load_ifm,     // ifm load start
+    input  wire                         q_load_filter,  // filter load start
 
 
-    input  wire                     q_fm_buf_switch,        // ofm <-> ifm switch/ ctrl 한테 받으면 좋을듯
+    input  wire                         q_fm_buf_switch,  // ofm <-> ifm switch <=> q_layer_done
 
 
     // Buffer Manager <-> AXI
-    input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
-    input  wire                     read_data_vld,  // whether valid
+    input  wire [AXI_WIDTH_DA-1:0]      read_data,      // data from axi
+    input  wire                         read_data_vld,  // whether valid
 
     // Buffer Manager <-> Controller 
     input  wire                         c_ctrl_data_run,
@@ -72,28 +72,29 @@ module buffer_manager #(
     input  wire                         c_is_last_chn,
 
     output wire                         o_bm_csync_done,
+    output wire                         o_bm_ofm_sync_done,  // ofm save done
 
 
     // Buffer Manager <-> pe_engine (IFM)
-    output reg [IFM_DW-1:0]        ib_data0_out,
-    output reg [IFM_DW-1:0]        ib_data1_out,
-    output reg [IFM_DW-1:0]        ib_data2_out,
+    output reg [IFM_DW-1:0]             ib_data0_out,
+    output reg [IFM_DW-1:0]             ib_data1_out,
+    output reg [IFM_DW-1:0]             ib_data2_out,
 
     // Buffer Manager <-> pe_engine (FILTER)
-    output wire                     fb_req_possible,
+    output wire                         fb_req_possible,
 
-    input  wire                     fb_req,
-    input  wire [FILTER_AW-1:0]     fb_addr,
+    input  wire                         fb_req,
+    input  wire [FILTER_AW-1:0]         fb_addr,
 
-    output wire [FILTER_DW-1:0]     fb_data0_out,
-    output wire [FILTER_DW-1:0]     fb_data1_out,
-    output wire [FILTER_DW-1:0]     fb_data2_out,
-    output wire [FILTER_DW-1:0]     fb_data3_out,
+    output wire [FILTER_DW-1:0]         fb_data0_out,
+    output wire [FILTER_DW-1:0]         fb_data1_out,
+    output wire [FILTER_DW-1:0]         fb_data2_out,
+    output wire [FILTER_DW-1:0]         fb_data3_out,
 
     // Buffer Manager <-> post processor or max pooling module
-    input wire                      pp_data_vld,
-    input wire [OFM_DW-1:0]         pp_data,
-    input wire [OFM_AW-1:0]         pp_addr
+    input wire                          ofm_data_vld,
+    input wire [OFM_DW-1:0]             ofm_data,
+    input wire [OFM_AW-1:0]             ofm_addr
 );
 
 
@@ -199,9 +200,22 @@ wire [OFM_AW-1:0]    ofm_buf_write_addr;
 wire [OFM_DW-1:0]    ofm_buf_write_data;
 wire                 ofm_buf_wea;
 //----------------------------------------------------------------------------
-assign ofm_buf_write_addr   = pp_addr;
-assign ofm_buf_write_data   = pp_data;
-assign ofm_buf_wea          = pp_data_vld;
+// write ofm & capture ofm write done
+assign ofm_buf_write_addr   = ofm_addr;
+assign ofm_buf_write_data   = ofm_data;
+assign ofm_buf_wea          = ofm_data_vld;
+
+
+wire [W_SIZE-1:0] eff_w = q_maxpool  ? (q_width  >> 1) 
+                        : q_upsample ? (q_width  << 1) 
+                        : q_width;
+wire [W_SIZE-1:0] eff_h = q_maxpool  ? (q_height >> 1) 
+                        : q_upsample ? (q_height << 1)
+                        : q_height;
+
+wire [OFM_AW-1:0] ofm_last_addr = eff_w * eff_h * q_channel_out - 1;
+
+assign o_bm_ofm_sync_done = (ofm_buf_wea == 1) && (ofm_buf_write_addr == ofm_last_addr);
 //----------------------------------------------------------------------------
 // AXI APPEND
 reg q_load_ifm_d;
@@ -386,7 +400,6 @@ always @(posedge clk or negedge rstn) begin
 end
 
 assign fb_req_possible = fb_req_possible_r;
-assign o_load_filter_done = fb_req_possible_r & ~fb_req_possible_r_d;
 //----------------------------------------------------------------------------
 wire                    fb_ena;
 wire                    fb_wea;

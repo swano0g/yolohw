@@ -9,13 +9,6 @@ module postprocessor #(
 
     parameter OUT_DW        = `W_DATA,     // 8; final output bitwidth
 
-    // parameter BIAS_DW     = `BIAS_DW,
-    // parameter BIAS_AW     = `BIAS_BUFFER_AW,
-    // parameter BIAS_DEPTH  = `BIAS_BUFFER_DEPTH,
-    // parameter SCALE_DW    = `SCALE_DW,
-    // parameter SCALE_AW    = `SCALE_BUFFER_AW,
-    // parameter SCALE_DEPTH = `SCALE_BUFFER_DEPTH,
-
     // common
     parameter AFFINE_DW     = `BIAS_DW,
     parameter AFFINE_AW     = `BIAS_BUFFER_AW,
@@ -37,12 +30,10 @@ module postprocessor #(
     input  wire                  rstn,
 
     // postprocessor <-> top
-    // input  wire [4:0]               q_layer,
-    
     input  wire [W_SIZE-1:0]        q_width,
     input  wire [W_SIZE-1:0]        q_height,
-    input  wire [W_CHANNEL-1:0]     q_channel,      // tiled
-    input  wire [W_CHANNEL-1:0]     q_channel_out,  // tiled
+    input  wire [W_CHANNEL-1:0]     q_channel,
+    input  wire [W_CHANNEL-1:0]     q_channel_out,
 
     input  wire                     q_load_bias,
     input  wire                     q_load_scale,
@@ -56,12 +47,11 @@ module postprocessor #(
 
 
     output wire                     o_pp_load_done,
-    output wire                     o_pb_sync_done,  // o_pp_sync_done?   ////=> post psync done signal
 
     // postprocessor <-> AXI
     // load bias, scales
-    input  wire [AXI_WIDTH_DA-1:0]  read_data,      // data from axi
-    input  wire                     read_data_vld,  // whether valid
+    input  wire [AXI_WIDTH_DA-1:0]  read_data,
+    input  wire                     read_data_vld,
 
 
     // postprocessor <-> pe_engine

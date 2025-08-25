@@ -25,9 +25,8 @@ module cnn_ctrl #(
     input  wire                     pe_csync_done,
 
     // buffer manager
-    // input  wire                     fb_load_done,       // not used
     input  wire                     pp_load_done,       // post processor pre_psync done
-    input  wire                     pb_sync_done,       // post processor (or buffer manager) post_psync done
+    input  wire                     ofm_sync_done,      // post processor (or buffer manager) post_psync done
 
 
     output wire                     o_fb_load_req,
@@ -109,8 +108,8 @@ always @(*) begin
         ST_CSYNC: 
             nstate = csync_done ? ST_DATA : ST_CSYNC;
         ST_PSYNC: 
-            nstate = (pb_sync_done == 1 && ctrl_psync_phase == 1) ? ST_IDLE 
-                   : (pp_load_done == 1 && ctrl_psync_phase == 0) ? ST_CSYNC 
+            nstate = (ofm_sync_done == 1 && ctrl_psync_phase == 1) ? ST_IDLE 
+                   : (pp_load_done == 1 && ctrl_psync_phase == 0)  ? ST_CSYNC 
                    : ST_PSYNC;
         ST_DATA:  
             nstate = 
