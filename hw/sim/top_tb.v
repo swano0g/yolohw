@@ -67,8 +67,8 @@ module top_tb;
     reg  [AXI_WIDTH_DA-1:0]     ifm_dram    [0:65536-1];
     reg  [AXI_WIDTH_DA-1:0]     filter_dram [0:65536-1];
     reg  [AXI_WIDTH_DA-1:0]     affine_dram [0:65536-1];
-    reg  [PSUM_DW-1:0]          expect      [0:65536-1];
-    reg  [OFM_DW-1:0]           answer      [0:65536-1];
+    reg  [PSUM_DW-1:0]          expect_conv [0:65536-1];
+    reg  [OFM_DW-1:0]           expect_aff  [0:65536-1];
 
 
     // IFM, FILTER AXI
@@ -607,12 +607,12 @@ module top_tb;
         $readmemh(`TEST_IFM_PATH, ifm_dram);
         $readmemh(`TEST_FILT_PATH, filter_dram);
         $readmemh(`TEST_AFFINE_PATH, affine_dram);
-        $readmemh(`TEST_EXP_PATH, expect);
-        $readmemh(`TEST_ANS_PATH, answer);
+        $readmemh(`TEST_EXP_CONV_PATH, expect_conv);
+        $readmemh(`TEST_EXP_AFFINE_PATH, expect_aff);
     end
 
 
-    task automatic tb_check_psum_vs_expect;
+    task automatic tb_check_conv_result;
         integer i;
         integer exp_words;
         integer errors, checks;
@@ -626,11 +626,11 @@ module top_tb;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
             $display("------------------------------------------------------------");
-            $display("PSUM CHECK");
+            $display("CONV CHECK");
 
             for (i = 0; i < exp_words; i = i + 1) begin
                 got = u_postprocessor.psumbuf[i]; 
-                exp = expect[i]; 
+                exp = expect_conv[i]; 
                 if (got !== exp) begin
                     errors = errors + 1;
                     if (printed < max_print) begin
@@ -644,7 +644,7 @@ module top_tb;
 
             // --------- summary ---------
             $display("------------------------------------------------------------");
-            $display("PSUM CHECK SUMMARY @%0t", $time);
+            $display("CONV CHECK SUMMARY @%0t", $time);
             $display("  total=%0d  match=%0d  errors=%0d",
                     checks, checks - errors, errors);
             $display("------------------------------------------------------------");
@@ -659,7 +659,7 @@ module top_tb;
     endtask
 
 
-    task automatic tb_check_output_vs_expect;
+    task automatic tb_check_affine_result;
         integer i;
         integer exp_words;
         integer errors, checks;
@@ -673,11 +673,11 @@ module top_tb;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
             $display("------------------------------------------------------------");
-            $display("ANSWER CHECK");
+            $display("AFFINE CHECK");
 
             for (i = 0; i < exp_words; i = i + 1) begin
                 got = u_buffer_manager.u_fm_buf1.ram[i]; 
-                exp = answer[i]; 
+                exp = expect_aff[i]; 
                 if (got !== exp) begin
                     errors = errors + 1;
                     if (printed < max_print) begin
@@ -691,7 +691,7 @@ module top_tb;
 
             // --------- summary ---------
             $display("------------------------------------------------------------");
-            $display("ANSWER CHECK SUMMARY @%0t", $time);
+            $display("AFFINE CHECK SUMMARY @%0t", $time);
             $display("  total=%0d  match=%0d  errors=%0d",
                     checks, checks - errors, errors);
             $display("------------------------------------------------------------");
@@ -716,9 +716,9 @@ module top_tb;
             checked_done <= 1'b1;
             @(posedge clk);
             @(posedge clk);
-            tb_check_psum_vs_expect();
+            tb_check_conv_result();
 
-            tb_check_output_vs_expect();
+            tb_check_affine_result();
         end
     end
 

@@ -27,13 +27,12 @@
         `define TEST_COL         16
         `define TEST_CHNIN       16    
         `define TEST_CHNOUT      32
-        `define TEST_IFM_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test1_input_32b.hex"
-        `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
-        `define TEST_AFFINE_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_affine_param.hex"
-        `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_output_32b.hex"
-        `define TEST_ANS_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_answer_32b.hex"
-        `define TEST_MEMORY    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory.hex"
-        `define TEST_MEMORY_16 "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory_16b.hex"
+        `define TEST_IFM_PATH           "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test1_input_32b.hex"
+        `define TEST_FILT_PATH          "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
+        `define TEST_AFFINE_PATH        "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_affine_param.hex"
+        `define TEST_EXP_CONV_PATH      "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_conv_result_32b.hex"
+        `define TEST_EXP_AFFINE_PATH    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_affine_result_32b.hex"
+        `define TEST_MEMORY_16          "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory_16b.hex"
         `define TEST_MEMORY_FILT_OFFSET     4096
         `define TEST_MEMORY_BIAS_OFFSET     8704
         `define TEST_MEMORY_SCALE_OFFSET    8832
@@ -45,13 +44,12 @@
         `define TEST_COL         16
         `define TEST_CHNIN       16    
         `define TEST_CHNOUT      32
-        `define TEST_IFM_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test1_input_32b.hex"
-        `define TEST_FILT_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
-        `define TEST_AFFINE_PATH "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_affine_param.hex"
-        `define TEST_EXP_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_output_32b.hex"
-        `define TEST_ANS_PATH  "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_answer_32b.hex"
-        `define TEST_MEMORY    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory.hex"
-        `define TEST_MEMORY_16 "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory_16b.hex"
+        `define TEST_IFM_PATH           "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/feamap/test1_input_32b.hex"
+        `define TEST_FILT_PATH          "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_param_packed_weight.hex"
+        `define TEST_AFFINE_PATH        "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/param_packed/test1_affine_param.hex"
+        `define TEST_EXP_CONV_PATH      "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_conv_result_32b.hex"
+        `define TEST_EXP_AFFINE_PATH    "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/test1_affine_result_32b.hex"
+        `define TEST_MEMORY_16          "C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/test1_memory_16b.hex"
         `define TEST_MEMORY_FILT_OFFSET     4096
         `define TEST_MEMORY_BIAS_OFFSET     8704
         `define TEST_MEMORY_SCALE_OFFSET    8832

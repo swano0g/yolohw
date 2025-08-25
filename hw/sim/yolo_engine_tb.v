@@ -278,7 +278,7 @@ end
 reg  [`PSUM_DW-1:0]          expect      [0:65536-1];
         
 initial begin    
-    $readmemh(`TEST_EXP_PATH, expect);
+    $readmemh(`TEST_EXP_CONV_PATH, expect);
 end
 
 
