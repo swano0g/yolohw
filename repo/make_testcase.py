@@ -20,10 +20,11 @@ def main():
     print(f" bias_hex={params.bias_hex}")
     print(f" scale_hex={params.scale_hex}")
     
+    
     print(f" out_ifm_hex={params.out_ifm_hex}")
     print(f" out_weight_hex={params.out_weight_hex}")
     print(f" out_affine_hex={params.out_affine_hex}")
-    print(f" out_golden_hex={params.out_golden_hex}")
+    
     
     ifm_src   = read_32b_hex_lines(params.ifm_hex)
     filt_src  = read_32b_hex_lines(params.filter_hex)
@@ -60,6 +61,9 @@ def main():
     print(f" scale  : {info_mono['scale_offset'] * 4}")
     print(f" total  : {info_mono['total_lines'] * 4} bytes")
     print(f" total  : {info_mono['total_lines']} lines")
+    
+    maxpool_result = maxpool_from_affine_words(affine_result, params.height, params.width, params.cout)
+    write_hex_lines(params.out_maxpool_result_hex, maxpool_result)
     
     
 if __name__ == "__main__":

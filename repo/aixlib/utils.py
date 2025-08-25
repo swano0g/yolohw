@@ -27,6 +27,8 @@ class TCParams:
     out_affine_hex: Path
     out_conv_result_hex: Path
     out_affine_result_hex: Path
+    out_maxpool_result_hex: Path
+    out_upsample_result_hex: Path
     out_golden_hex: Path
     
     
@@ -95,9 +97,12 @@ def load_params(args_path: Path) -> TCParams:
     out_ifm_hex    = out_feamap_dir       / f"test{tc_no}_input_32b.hex"
     out_weight_hex = out_param_packed_dir / f"test{tc_no}_param_packed_weight.hex"
     out_affine_hex = out_param_packed_dir / f"test{tc_no}_affine_param.hex"
-    out_conv_result_hex = out_expect_dir  / f"test{tc_no}_conv_result_32b.hex"
     
-    out_affine_result_hex = out_expect_dir / f"test{tc_no}_affine_result_32b.hex"
+    out_conv_result_hex = out_expect_dir     / f"test{tc_no}_conv_result_32b.hex"
+    out_affine_result_hex = out_expect_dir   / f"test{tc_no}_affine_result_32b.hex"
+    out_maxpool_result_hex = out_expect_dir  / f"test{tc_no}_maxpool_result_32b.hex"
+    out_upsample_result_hex = out_expect_dir / f"test{tc_no}_upsample_result_32b.hex"
+    
     out_golden_hex = out_expect_dir        / f"test{tc_no}_output_32b.hex"
 
     return TCParams(
@@ -113,6 +118,8 @@ def load_params(args_path: Path) -> TCParams:
         out_affine_hex=out_affine_hex,
         out_conv_result_hex=out_conv_result_hex,
         out_affine_result_hex=out_affine_result_hex,
+        out_maxpool_result_hex=out_maxpool_result_hex,
+        out_upsample_result_hex=out_upsample_result_hex,
         out_golden_hex=out_golden_hex,
     )
     

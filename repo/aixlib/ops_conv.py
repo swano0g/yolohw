@@ -139,3 +139,69 @@ def run_affine_from_conv(conv_result: list[str], affine: list[str],
                 m += 4
 
     return out
+
+
+
+def maxpool_from_affine_words(
+    words: list[str],
+    H: int,
+    W: int,
+    M: int,
+) -> list[str]:
+    
+    kernel = 2
+    stride = 2
+    N = M * W * H
+    
+    arr = []
+    for v in words:
+        v0 = v[6:8]
+        v1 = v[4:6]
+        v2 = v[2:4]
+        v3 = v[0:2]
+        
+        v0_int = int(v0, 16)
+        v1_int = int(v1, 16)
+        v2_int = int(v2, 16)
+        v3_int = int(v3, 16)
+        arr.append(v0_int)
+        arr.append(v1_int)
+        arr.append(v2_int)
+        arr.append(v3_int)
+        
+    ofm = np.asarray(arr).reshape(H, W, M)
+    ofm = ofm.transpose(2, 0, 1) 
+    
+    
+    # 2) maxpool (VALID, padding 없음)
+    outH = 1 + (H - kernel) // stride
+    outW = 1 + (W - kernel) // stride
+    mp_out = np.zeros((M, outH, outW), dtype=np.uint8)
+    
+    for m in range(M):
+        for oy in range(outH):
+            ys = oy * stride
+            for ox in range(outW):
+                xs = ox * stride
+                window = ofm[m, ys:ys+kernel, xs:xs+kernel]
+                mp_out[m, oy, ox] = window.max()
+                
+                
+    out_words: list[str] = []
+    
+    acc = 0
+    cnt = 0
+    
+
+        
+    for y in range(outH):
+        for x in range(outW):
+            for m in range(M):
+                byte = int(mp_out[m, y, x]) & 0xFF
+                acc |= (byte << (8 * (cnt % 4)))   # LSB-first
+                cnt += 1
+                if cnt % 4 == 0:
+                    out_words.append(f"{acc:08x}")
+                    acc = 0
+
+    return out_words
