@@ -654,9 +654,17 @@ module top_tb;
         $readmemh(`TEST_EXP_MAXPOOL_PATH, expect_mp);
     end
 
+
     // ------- capture signals -------
+    reg [PSUM_DW-1:0] cap_pe_mem [0:65536-1];
     reg [OFM_DW-1:0]  cap_pp_mem [0:65536-1];
     reg [OFM_DW-1:0]  cap_mp_mem [0:65536-1];
+
+    wire [PSUM_DW-1:0]  cap_pe_data0 = pe_data[0*PSUM_DW+:PSUM_DW];
+    wire [PSUM_DW-1:0]  cap_pe_data1 = pe_data[1*PSUM_DW+:PSUM_DW];
+    wire [PSUM_DW-1:0]  cap_pe_data2 = pe_data[2*PSUM_DW+:PSUM_DW];
+    wire [PSUM_DW-1:0]  cap_pe_data3 = pe_data[3*PSUM_DW+:PSUM_DW];
+
 
     wire                cap_pp_vld  = pp_data_vld;
     wire [OFM_DW-1:0]   cap_pp_data = pp_data;
@@ -666,13 +674,33 @@ module top_tb;
     wire [OFM_DW-1:0]   cap_mp_data = mp_data;
     wire [OFM_AW-1:0]   cap_mp_addr = mp_addr;
 
-    always @(posedge clk) begin
-        if (cap_pp_vld) begin
-            cap_pp_mem[cap_pp_addr] <= cap_pp_data;
-        end
+    integer base_addr_cap;
+    integer i;
 
-        if (cap_mp_vld) begin 
-            cap_mp_mem[cap_mp_addr] <= cap_mp_data;
+    always @(posedge clk) begin
+        if (!rstn) begin
+            base_addr_cap <= 0;
+            for (i = 0; i < 65536; i = i + 1) begin 
+                cap_pe_mem[i] <= 0;
+            end
+        end
+        else begin 
+            if (pe_vld) begin 
+                base_addr_cap =  (pe_row * q_width + pe_col) * (q_channel_out<<2) + pe_chn_out * Tout;
+                
+                cap_pe_mem[base_addr_cap + 0] <= $signed(cap_pe_mem[base_addr_cap + 0]) + $signed(cap_pe_data0);
+                cap_pe_mem[base_addr_cap + 1] <= $signed(cap_pe_mem[base_addr_cap + 1]) + $signed(cap_pe_data1);
+                cap_pe_mem[base_addr_cap + 2] <= $signed(cap_pe_mem[base_addr_cap + 2]) + $signed(cap_pe_data2);
+                cap_pe_mem[base_addr_cap + 3] <= $signed(cap_pe_mem[base_addr_cap + 3]) + $signed(cap_pe_data3);
+            end
+
+            if (cap_pp_vld) begin
+                cap_pp_mem[cap_pp_addr] <= cap_pp_data;
+            end
+
+            if (cap_mp_vld) begin 
+                cap_mp_mem[cap_mp_addr] <= cap_mp_data;
+            end
         end
     end
     // -------------------------------
@@ -682,7 +710,7 @@ module top_tb;
         integer exp_words;
         integer errors, checks;
         integer max_print, printed;
-        reg [OFM_DW-1:0] got, exp;
+        reg [PSUM_DW-1:0] got, exp;
         
         begin
             errors    = 0;
@@ -694,7 +722,7 @@ module top_tb;
             $display("CONV CHECK START");
 
             for (i = 0; i < exp_words; i = i + 1) begin
-                got = u_postprocessor.psumbuf[i]; 
+                got = cap_pe_mem[i]; 
                 exp = expect_conv[i]; 
                 if (got !== exp) begin
                     errors = errors + 1;
@@ -712,7 +740,6 @@ module top_tb;
             $display("CONV CHECK SUMMARY @%0t", $time);
             $display("  total=%0d  match=%0d  errors=%0d",
                     checks, checks - errors, errors);
-            $display("------------------------------------------------------------");
             if (errors == 0) begin
                 $display("RESULT: PASS");
             end else begin
@@ -760,7 +787,6 @@ module top_tb;
             $display("AFFINE CHECK SUMMARY @%0t", $time);
             $display("  total=%0d  match=%0d  errors=%0d",
                     checks, checks - errors, errors);
-            $display("------------------------------------------------------------");
             if (errors == 0) begin
                 $display("RESULT: PASS");
             end else begin
@@ -808,7 +834,6 @@ module top_tb;
             $display("MAXPOOL CHECK SUMMARY @%0t", $time);
             $display("  total=%0d  match=%0d  errors=%0d",
                     checks, checks - errors, errors);
-            $display("------------------------------------------------------------");
             if (errors == 0) begin
                 $display("RESULT: PASS");
             end else begin
