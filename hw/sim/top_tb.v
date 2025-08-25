@@ -3,8 +3,8 @@
 
 // select test case
 // `define TESTCASE_0 1
-`define TESTCASE_1 1
-// `define TESTCASE_2 1
+// `define TESTCASE_1 1
+`define TESTCASE_2 1
 
 
 `include "sim_cfg.vh"
@@ -69,6 +69,7 @@ module top_tb;
     reg  [AXI_WIDTH_DA-1:0]     affine_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect_conv [0:65536-1];
     reg  [OFM_DW-1:0]           expect_aff  [0:65536-1];
+    reg  [OFM_DW-1:0]           expect_mp   [0:65536-1];
 
 
     // IFM, FILTER AXI
@@ -133,6 +134,15 @@ module top_tb;
     wire                        pp_data_vld;
     wire [OFM_DW-1:0]           pp_data;
     wire [OFM_AW-1:0]           pp_addr;
+
+    wire [W_SIZE-1:0]           pp_row;
+    wire [W_SIZE-1:0]           pp_col;
+    wire [W_CHANNEL-1:0]        pp_chn_out;
+
+    // maxpool
+    wire                        mp_data_vld;
+    wire  [OFM_DW-1:0]          mp_data;
+    wire  [OFM_AW-1:0]          mp_addr;
 
 
     //----------------------------------------------------------------------  
@@ -234,9 +244,12 @@ module top_tb;
         .fb_data3_out       (filter_data_3    ),
 
         // Buffer Manager <-> post processor or max pooling module
-        .pp_data_vld        (pp_data_vld      ),
-        .pp_data            (pp_data          ),
-        .pp_addr            (pp_addr          )
+        // .pp_data_vld        (pp_data_vld      ),
+        // .pp_data            (pp_data          ),
+        // .pp_addr            (pp_addr          )
+        .pp_data_vld        (mp_data_vld      ),
+        .pp_data            (mp_data          ),
+        .pp_addr            (mp_addr          )
     );
     //----------------------------------------------------------------------  
     // 6) pe_engine instance
@@ -329,11 +342,40 @@ module top_tb;
         // postprocessor <-> buffer_manager
         .o_pp_data_vld(pp_data_vld),
         .o_pp_data(pp_data),
-        .o_pp_addr(pp_addr)
+        .o_pp_addr(pp_addr),
+
+        .o_pp_row(pp_row),
+        .o_pp_col(pp_col),
+        .o_pp_chn_out(pp_chn_out)
     );
-    
     //----------------------------------------------------------------------  
-    // 8) AXI mimic
+    // 8) maxpool instance
+    //----------------------------------------------------------------------  
+    maxpool u_maxpool (
+        .clk(clk),
+        .rstn(rstn),
+
+        // maxpool <-> top
+        .q_width(q_width),
+        .q_height(q_height),
+        .q_channel_out(q_channel_out),
+
+        // maxpool <-> postprocessor
+        .pp_data_vld(pp_data_vld),
+        .pp_data(pp_data),
+        .pp_row(pp_row), 
+        .pp_col(pp_col), 
+        .pp_chn_out(pp_chn_out),
+
+        // maxpool <-> buffer manager
+        .o_mp_data_vld(mp_data_vld),
+        .o_mp_data(mp_data),
+        .o_mp_addr(mp_addr)
+    );
+
+
+    //----------------------------------------------------------------------  
+    // 9) AXI mimic
     //----------------------------------------------------------------------  
     function integer rand0_to_N;
         input integer N;
@@ -609,15 +651,38 @@ module top_tb;
         $readmemh(`TEST_AFFINE_PATH, affine_dram);
         $readmemh(`TEST_EXP_CONV_PATH, expect_conv);
         $readmemh(`TEST_EXP_AFFINE_PATH, expect_aff);
+        $readmemh(`TEST_EXP_MAXPOOL_PATH, expect_mp);
     end
 
+    // ------- capture signals -------
+    reg [OFM_DW-1:0]  cap_pp_mem [0:65536-1];
+    reg [OFM_DW-1:0]  cap_mp_mem [0:65536-1];
+
+    wire                cap_pp_vld  = pp_data_vld;
+    wire [OFM_DW-1:0]   cap_pp_data = pp_data;
+    wire [OFM_AW-1:0]   cap_pp_addr = pp_addr;
+
+    wire                cap_mp_vld  = mp_data_vld;
+    wire [OFM_DW-1:0]   cap_mp_data = mp_data;
+    wire [OFM_AW-1:0]   cap_mp_addr = mp_addr;
+
+    always @(posedge clk) begin
+        if (cap_pp_vld) begin
+            cap_pp_mem[cap_pp_addr] <= cap_pp_data;
+        end
+
+        if (cap_mp_vld) begin 
+            cap_mp_mem[cap_mp_addr] <= cap_mp_data;
+        end
+    end
+    // -------------------------------
 
     task automatic tb_check_conv_result;
         integer i;
         integer exp_words;
         integer errors, checks;
         integer max_print, printed;
-        reg [W_PSUM-1:0] got, exp;
+        reg [OFM_DW-1:0] got, exp;
         
         begin
             errors    = 0;
@@ -625,8 +690,8 @@ module top_tb;
             max_print = 200;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
-            $display("------------------------------------------------------------");
-            $display("CONV CHECK");
+            $display("============================================================");
+            $display("CONV CHECK START");
 
             for (i = 0; i < exp_words; i = i + 1) begin
                 got = u_postprocessor.psumbuf[i]; 
@@ -653,6 +718,7 @@ module top_tb;
             end else begin
                 $display("RESULT: FAIL");
             end
+            $display("============================================================");
             // -----------------------------------------------
 
         end
@@ -672,11 +738,11 @@ module top_tb;
             max_print = 200;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
-            $display("------------------------------------------------------------");
-            $display("AFFINE CHECK");
+            $display("============================================================");
+            $display("AFFINE CHECK START");
 
             for (i = 0; i < exp_words; i = i + 1) begin
-                got = u_buffer_manager.u_fm_buf1.ram[i]; 
+                got = cap_pp_mem[i]; 
                 exp = expect_aff[i]; 
                 if (got !== exp) begin
                     errors = errors + 1;
@@ -697,10 +763,58 @@ module top_tb;
             $display("------------------------------------------------------------");
             if (errors == 0) begin
                 $display("RESULT: PASS");
-                $finish;
             end else begin
                 $display("RESULT: FAIL");
             end
+            $display("============================================================");
+            // -----------------------------------------------
+
+        end
+    endtask
+
+
+    task automatic tb_check_maxpool_result;
+        integer i;
+        integer exp_words;
+        integer errors, checks;
+        integer max_print, printed;
+        reg [OFM_DW-1:0] got, exp;
+        
+        begin
+            errors    = 0;
+            checks    = 0;
+            max_print = 50;
+            printed   = 0;
+            exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
+            $display("============================================================");
+            $display("MAXPOOL CHECK START");
+
+            for (i = 0; i < exp_words; i = i + 1) begin
+                got = cap_mp_mem[i]; 
+                exp = expect_mp[i]; 
+                if (got !== exp) begin
+                    errors = errors + 1;
+                    if (printed < max_print) begin
+                        $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
+                                $time, i, got, exp);
+                        printed = printed + 1;
+                    end
+                end
+                checks = checks + 1;
+            end
+
+            // --------- summary ---------
+            $display("------------------------------------------------------------");
+            $display("MAXPOOL CHECK SUMMARY @%0t", $time);
+            $display("  total=%0d  match=%0d  errors=%0d",
+                    checks, checks - errors, errors);
+            $display("------------------------------------------------------------");
+            if (errors == 0) begin
+                $display("RESULT: PASS");
+            end else begin
+                $display("RESULT: FAIL");
+            end
+            $display("============================================================");
             // -----------------------------------------------
 
         end
@@ -713,18 +827,19 @@ module top_tb;
 
     always @(posedge clk) begin
         if (layer_done && !checked_done) begin
-            checked_done <= 1'b1;
             @(posedge clk);
             @(posedge clk);
             tb_check_conv_result();
-
             tb_check_affine_result();
+            tb_check_maxpool_result();
+            @(posedge clk);
+            checked_done <= 1'b1;
         end
     end
 
     initial begin
         @(posedge checked_done);     
-        repeat (200) @(posedge clk);
+        repeat (100) @(posedge clk);
         $finish;
     end
 
