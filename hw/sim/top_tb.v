@@ -66,8 +66,8 @@ module top_tb;
     reg  [AXI_WIDTH_DA-1:0]     affine_dram [0:65536-1];
     reg  [PSUM_DW-1:0]          expect_conv [0:65536-1];
     reg  [OFM_DW-1:0]           expect_aff  [0:65536-1];
-    reg  [OFM_DW-1:0]           expect_mp   [0:65536-1];
-
+    reg  [OFM_DW-1:0]           expect_mp1  [0:65536-1];
+    reg  [OFM_DW-1:0]           expect_mp2  [0:65536-1];
 
     // IFM, FILTER AXI
     reg [AXI_WIDTH_DA-1:0]      axi_read_data;      // data from axi
@@ -94,6 +94,7 @@ module top_tb;
     reg                         q_start;
 
     reg                         q_maxpool;
+    reg  [1:0]                  q_maxpool_stride;
     reg                         q_upsample;
 
     wire                        ctrl_csync_run;
@@ -210,6 +211,7 @@ module top_tb;
         .q_row_stride       (q_row_stride       ),
 
         .q_maxpool          (q_maxpool          ),
+        .q_maxpool_stride   (q_maxpool_stride   ),
         .q_upsample         (q_upsample         ),
 
         .q_load_ifm         (q_load_ifm         ),
@@ -359,9 +361,9 @@ module top_tb;
         .rstn               (rstn               ),
 
         // maxpool <-> top
-        .q_width            (q_width            ),
-        .q_height           (q_height           ),
         .q_channel_out      (q_channel_out      ),
+
+        .q_maxpool_stride   (q_maxpool_stride   ),
 
         // maxpool <-> postprocessor
         .pp_data_vld        (pp_data_vld        ),
@@ -609,7 +611,8 @@ module top_tb;
         q_frame_size   = TEST_FRAME_SIZE;
         q_layer        = 0;
         q_start        = 0; 
-        q_maxpool      = 1'b1;
+        q_maxpool      = 1;
+        q_maxpool_stride = 1;
         q_upsample     = 0;
 
         q_load_ifm     = 0;
@@ -655,7 +658,8 @@ module top_tb;
         $readmemh(`TEST_AFFINE_PATH, affine_dram);
         $readmemh(`TEST_EXP_CONV_PATH, expect_conv);
         $readmemh(`TEST_EXP_AFFINE_PATH, expect_aff);
-        $readmemh(`TEST_EXP_MAXPOOL_PATH, expect_mp);
+        $readmemh(`TEST_EXP_MAXPOOL_STRIDE1_PATH, expect_mp1);
+        $readmemh(`TEST_EXP_MAXPOOL_STRIDE2_PATH, expect_mp2);
     end
 
 
@@ -719,7 +723,7 @@ module top_tb;
         begin
             errors    = 0;
             checks    = 0;
-            max_print = 200;
+            max_print = 50;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_CHNOUT;
             $display("============================================================");
@@ -766,7 +770,7 @@ module top_tb;
         begin
             errors    = 0;
             checks    = 0;
-            max_print = 200;
+            max_print = 50;
             printed   = 0;
             exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
             $display("============================================================");
@@ -802,7 +806,9 @@ module top_tb;
     endtask
 
 
-    task automatic tb_check_maxpool_result;
+    task automatic tb_check_maxpool_result (
+        input integer mp_stride
+    );
         integer i;
         integer exp_words;
         integer errors, checks;
@@ -814,13 +820,23 @@ module top_tb;
             checks    = 0;
             max_print = 50;
             printed   = 0;
-            exp_words = TEST_ROW/2 * TEST_COL/2 * TEST_T_CHNOUT;
+            if (mp_stride == 1) begin 
+                exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
+            end else if (mp_stride == 2) begin 
+                exp_words = TEST_ROW/2 * TEST_COL/2 * TEST_T_CHNOUT;
+            end
+            
             $display("============================================================");
             $display("MAXPOOL CHECK START");
 
             for (i = 0; i < exp_words; i = i + 1) begin
                 got = cap_mp_mem[i]; 
-                exp = expect_mp[i]; 
+                if (mp_stride == 1) begin 
+                    exp = expect_mp1[i];
+                end else if (mp_stride == 2) begin 
+                    exp = expect_mp2[i];
+                end
+                 
                 if (got !== exp) begin
                     errors = errors + 1;
                     if (printed < max_print) begin
@@ -859,7 +875,7 @@ module top_tb;
             @(posedge clk);
             tb_check_conv_result();
             tb_check_affine_result();
-            tb_check_maxpool_result();
+            tb_check_maxpool_result(q_maxpool_stride);
             @(posedge clk);
             checked_done <= 1'b1;
         end
