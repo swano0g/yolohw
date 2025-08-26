@@ -31,9 +31,9 @@
 
 
 // CONTROLLER   
-`define W_SIZE              10              // MAX WIDTH 256    row, col
-`define W_CHANNEL           10              // MAX CHANNEL 512  chn
-`define W_FRAME_SIZE        (2 * `W_SIZE + `W_CHANNEL)
+`define W_SIZE              9               // MAX WIDTH 256                    row, col
+`define W_CHANNEL           8               // MAX CHANNEL 512 => tiled: 128    chn
+`define W_FRAME_SIZE        (`W_SIZE + `W_SIZE + `W_CHANNEL)
 `define W_DELAY             14              // MAX DELAY 2048
 
 
