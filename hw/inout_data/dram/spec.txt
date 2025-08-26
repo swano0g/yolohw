@@ -1,0 +1,7 @@
+offset
+ ifm    : 0
+ filter : 4096
+ bias   : 8704
+ scale  : 8832
+ total  : 8960 bytes
+ total  : 2240 lines

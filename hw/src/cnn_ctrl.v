@@ -13,8 +13,7 @@ module cnn_ctrl #(
     
     // INPUTS
 
-
-    //
+    // TOP
     input  wire [W_SIZE-1:0]        q_width,
     input  wire [W_SIZE-1:0]        q_height,
     input  wire [W_CHANNEL-1:0]     q_channel,          // TILED input CHANNEL!!!
@@ -26,15 +25,17 @@ module cnn_ctrl #(
     input  wire                     pe_csync_done,
 
     // buffer manager
-    // input  wire                     fb_load_done,       // not used
-    input  wire                     pb_sync_done,
-    
+    input  wire                     pp_load_done,       // post processor pre_psync done
+    input  wire                     ofm_sync_done,      // post processor (or buffer manager) post_psync done
+
+
     output wire                     o_fb_load_req,
 
     // OUTPUTS
     output wire                     o_ctrl_csync_run,   // synchronize cout
     output wire                     o_ctrl_psync_run,   // synchronize psum
     output wire                     o_ctrl_data_run,    // calculate
+    output wire                     o_ctrl_psync_phase, // psync phase 0: PRE, 1: POST
 
     output wire                     o_layer_done,
     
@@ -62,6 +63,8 @@ reg [1:0]  cstate, nstate;
 reg        ctrl_csync_run;
 reg        ctrl_psync_run;
 reg        ctrl_data_run;
+reg        ctrl_psync_phase;
+
 reg        layer_done;
 
 reg [W_SIZE-1:0]        row;
@@ -101,11 +104,13 @@ wire csync_done = pe_csync_done & bm_csync_done;
 always @(*) begin
     case (cstate)
         ST_IDLE:  
-            nstate = q_start ? ST_CSYNC : ST_IDLE;
+            nstate = q_start ? ST_PSYNC : ST_IDLE;
         ST_CSYNC: 
             nstate = csync_done ? ST_DATA : ST_CSYNC;
         ST_PSYNC: 
-            nstate = pb_sync_done ? ST_IDLE : ST_PSYNC;
+            nstate = (ofm_sync_done == 1 && ctrl_psync_phase == 1) ? ST_IDLE 
+                   : (pp_load_done == 1 && ctrl_psync_phase == 0)  ? ST_CSYNC 
+                   : ST_PSYNC;
         ST_DATA:  
             nstate = 
                 end_frame && is_last_chn_out ? ST_PSYNC : 
@@ -128,6 +133,22 @@ always @(*) begin
         ST_DATA:    ctrl_data_run  = 1'b1;
     endcase
 end
+
+// psync phase
+always @(posedge clk or negedge rstn) begin 
+    if (!rstn) begin 
+        ctrl_psync_phase <= 0;
+    end else begin 
+        if (layer_done) begin 
+            ctrl_psync_phase <= 0;
+        end else if (cstate != ST_PSYNC && nstate == ST_PSYNC) begin 
+            ctrl_psync_phase <= (cstate == ST_DATA);
+        end
+    end
+end
+
+assign o_ctrl_psync_phase = (cstate == ST_PSYNC) ? ctrl_psync_phase : 1'b0;
+
 
 // Nested counters: col fastest, then chn, then row, then chn_out
 always @(posedge clk or negedge rstn) begin
@@ -196,8 +217,10 @@ always @(posedge clk or negedge rstn) begin
         layer_done <= 0;
     end
     else begin
-        if (cstate == ST_PSYNC && nstate == ST_IDLE)
+        layer_done <= 0; // pulse
+        if (cstate == ST_PSYNC && nstate == ST_IDLE) begin
             layer_done <= 1;
+        end
     end
 end
 
@@ -210,8 +233,6 @@ assign o_row            = row;
 assign o_col            = col;
 assign o_chn            = chn;
 assign o_chn_out        = chn_out;
-// assign o_data_count     = data_count;
-// assign o_end_frame      = end_frame;
 assign o_layer_done     = layer_done;
 
 assign o_is_first_row   = is_first_row;

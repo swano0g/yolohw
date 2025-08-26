@@ -502,7 +502,7 @@ module bm_tb;
     initial begin 
         $readmemh(`TEST_IFM_PATH, ifm_dram);
         $readmemh(`TEST_FILT_PATH, filter_dram);
-        $readmemh(`TEST_EXP_PATH, expect);
+        $readmemh(`TEST_EXP_CONV_PATH, expect);
     end
 
 
