@@ -242,56 +242,109 @@ function [15:0] blk16;
 endfunction
 
 
-function [31:0] w_off_words; input [3:0] idx; begin
-  case(idx)
-    0: w_off_words =          0;      // L0  : 432
-    1: w_off_words =        432;      // L2  : 4608
-    2: w_off_words =       5040;      // L4  : 18432
-    3: w_off_words =      23472;      // L6  : 73728
-    4: w_off_words =      97200;      // L8  : 294912
-    5: w_off_words =     392112;      // L10 : 1179648
-    6: w_off_words =    1571760;      // L12 : 131072
-    7: w_off_words =    1702832;      // L13 : 1179648
-    8: w_off_words =    2882480;      // L14 : 99840
-    9: w_off_words =    2982320;      // L17 : 32768
-   10: w_off_words =    3015088;      // L20 : 74880
-    default: w_off_words = 0;
-  endcase
-end endfunction
+                    // q_width         <= TEST_COL;       // 16
+                    // q_height        <= TEST_ROW;       // 16
+                    // q_channel       <= TEST_T_CHNIN;   // 16 (4)
+                    // q_channel_out   <= TEST_T_CHNOUT;  // 32 (8) 
+                    // q_frame_size    <= `TEST_ROW * `TEST_COL * `TEST_T_CHNIN
+                    // q_row_stride    <= TEST_COL * TEST_T_CHNIN;
 
 
-function [31:0] w_grp_words; input [3:0] idx; begin
-  case(idx)
-     0: w_grp_words =   108;   // L0 : Cin=3,   3x3
-     1: w_grp_words =   576;   // L2 : Cin=16,  3x3
-     2: w_grp_words =  1152;   // L4 : Cin=32,  3x3
-     3: w_grp_words =  2304;   // L6 : Cin=64,  3x3
-     4: w_grp_words =  4608;   // L8 : Cin=128, 3x3
-     5: w_grp_words =  9216;   // L10: Cin=256, 3x3
-     6: w_grp_words =  2048;   // L12: Cin=512, 1x1
-     7: w_grp_words =  9216;   // L13: Cin=256, 3x3
-     8: w_grp_words =  2048;   // L14: Cin=512, 1x1
-     9: w_grp_words =  1024;   // L17: Cin=256, 1x1
-    10: w_grp_words =  1536;   // L20: Cin=384, 1x1
-    default: w_grp_words = 0;
-  endcase
-end endfunction
-function [15:0] w_grp_total; input [3:0] idx; begin
-  case(idx)
-     0: w_grp_total =  4;   // 16/4
-     1: w_grp_total =  8;   // 32/4
-     2: w_grp_total = 16;   // 64/4
-     3: w_grp_total = 32;   // 128/4
-     4: w_grp_total = 64;   // 256/4
-     5: w_grp_total =128;   // 512/4
-     6: w_grp_total = 64;   // 256/4
-     7: w_grp_total =128;   // 512/4
-     8: w_grp_total = 49;   // ceil(195/4)
-     9: w_grp_total = 32;   // 128/4
-    10: w_grp_total = 49;   // ceil(195/4)
-    default: w_grp_total = 0;
-  endcase
-end endfunction
+//        {q_upsample, q_maxpool, q_maxpool_stride, q_row_stride, q_frame_size, q_channel_out, q_channel, q_height, w_width}
+
+localparam W_ENTRY = 1                  // q_upsample
+                   + 1                  // q_maxpool
+                   + 2                  // q_maxpool_stride
+                   + W_SIZE + W_CHANNEL // q_row_stride
+                   + W_FRAME_SIZE       // q_frame_size
+                   + W_CHANNEL          // q_channel_out
+                   + W_CHANNEL          // q_channel
+                   + W_SIZE             // q_height
+                   + W_SIZE;            // q_width
+
+
+// function [W_ENTRY-1:0] layer_entry;
+//     input [4:0] q_layer;
+//     begin
+//         case (q_layer)
+//         5'd0: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd2         // maxpool_stride
+//                 'd256,      // row_stride
+//                 'd65536,    // frame_size
+//                 'd4,        // channel_out
+//                 'd1,        // channel (in)
+//                 'd256,      // height
+//                 'd256       // width
+//                 };
+//         5'd1: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd512,      // row_stride
+//                 'd65536,    // frame_size
+//                 'd8,        // channel_out
+//                 'd4,        // channel (in)
+//                 'd128,      // height
+//                 'd128       // width
+//                 };
+//         5'd2: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd512,      // row_stride
+//                 'd32768,    // frame_size
+//                 'd16,        // channel_out
+//                 'd8,        // channel (in)
+//                 'd64,      // height
+//                 'd64       // width
+//                 };
+//         5'd3: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd512,      // row_stride
+//                 'd16384,    // frame_size
+//                 'd32,        // channel_out
+//                 'd16,        // channel (in)
+//                 'd32,      // height
+//                 'd32       // width
+//                 };
+//         5'd4: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd512,      // row_stride
+//                 'd8192,    // frame_size
+//                 'd64,        // channel_out
+//                 'd32,        // channel (in)
+//                 'd16,      // height
+//                 'd16       // width
+//                 };
+//         5'd4: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd512,      // row_stride
+//                 'd8192,    // frame_size
+//                 'd64,        // channel_out
+//                 'd32,        // channel (in)
+//                 'd16,      // height
+//                 'd16       // width
+//                 };
+//         5'd5: layer_entry = {
+//                 'b0,        // upsample
+//                 'b1,        // maxpool
+//                 'd512,      // row_stride
+//                 'd8192,    // frame_size
+//                 'd64,        // channel_out
+//                 'd32,        // channel (in)
+//                 'd16,      // height
+//                 'd16       // width
+//                 };
+//         default: layer_entry = {W_ENTRY{1'b0}};
+//         endcase
+//     end
+// endfunction
+
+
+
 
 
 //================================================================
@@ -307,6 +360,7 @@ reg  [W_CHANNEL-1:0]        q_channel_out;
 reg  [W_FRAME_SIZE-1:0]     q_frame_size;
 reg  [W_SIZE+W_CHANNEL-1:0] q_row_stride;
 reg                         q_maxpool;
+reg  [1:0]                  q_maxpool_stride;
 reg                         q_upsample;
 
 reg                         q_c_ctrl_start;  // cnn_ctrl start signal (q_start)
@@ -320,9 +374,9 @@ reg                         q_load_scale;
 //  - IFM 초기 적재 완료: buffer_manager(or DMA 프론트엔드)에서 발생
 //  - 한 레이어 연산 완료: cnn_ctrl에서 제공 (기존 layer_done 사용)
 //  - OFM 저장 완료: writer(또는 postprocessor→writer)에서 발생
-wire dma_ifm_load_done;    // TODO: buffer_manager에 포트 추가하여 연결
-wire ofm_write_done;   // TODO: OFM writer 모듈 done 신호 연결
-wire layer_done;       // 이미 cnn_ctrl에서 나옴
+wire dma_ifm_load_done; // TODO: buffer_manager에 포트 추가하여 연결
+wire ofm_write_done;    // TODO: OFM writer 모듈 done 신호 연결
+wire layer_done;        // 이미 cnn_ctrl에서 나옴
 
 
 reg [2:0] q_state;
@@ -350,12 +404,13 @@ always @(posedge clk or negedge rstn) begin
         q_frame_size    <= 0;
         q_row_stride    <= 0;
         q_maxpool       <= 0;
+        q_maxpool_stride<= 0;
         q_upsample      <= 0;
 
-        q_load_ifm <= 0;
-        q_load_filter <= 0;
-        q_load_bias <= 0;
-        q_load_scale <= 0;
+        q_load_ifm      <= 0;
+        q_load_filter   <= 0;
+        q_load_bias     <= 0;
+        q_load_scale    <= 0;
 
         // layer info reset...
 
@@ -367,7 +422,7 @@ always @(posedge clk or negedge rstn) begin
             S_IDLE: begin
                 if (ap_start) begin
                     q_layer     <= 0;
-                    q_state <= S_LOAD_CFG;
+                    q_state     <= S_LOAD_CFG;
                 end
             end
 
@@ -391,6 +446,7 @@ always @(posedge clk or negedge rstn) begin
                     q_frame_size    <= TEST_FRAME_SIZE;
                     q_row_stride    <= TEST_COL * TEST_T_CHNIN;
                     q_maxpool       <= 1;
+                    q_maxpool_stride<= 2;
                     // 만약 레이어가 늘어나면 분기하는 로직이 필요함.
                     q_state <= S_LOAD_IFM;
                 end else begin 
@@ -400,6 +456,7 @@ always @(posedge clk or negedge rstn) begin
                     // layer 0면 LOAD_IFM으로 전이
                     // 그 외 layer면 q_c_ctrl_start = 1로 바꾸고 (1cycle) WAIT_CNN_CTRL로 전이
                     // special layer 처리
+
 
                     // 아직 구현할 필요 없음 
                 end
@@ -826,12 +883,12 @@ always @(posedge clk or negedge rstn) begin
         end
     end
 end
-
-
 //----------------------------------------------------------------
 // 5-1) DMA write
 //----------------------------------------------------------------
 // ...
+
+
 
 
 
@@ -883,28 +940,28 @@ axi_dma_rd #(
 u_dma_read(
     //AXI Master Interface
     //Read address channel
-    .M_ARVALID	(M_ARVALID	  ),  // address/control valid handshake
-    .M_ARREADY	(M_ARREADY	  ),  // Read addr ready
-    .M_ARADDR	(M_ARADDR	  ),  // Address Read
-    .M_ARID		(M_ARID		  ),  // Read addr ID
-    .M_ARLEN	(M_ARLEN	  ),  // Transfer length
-    .M_ARSIZE	(M_ARSIZE	  ),  // Transfer width
-    .M_ARBURST	(M_ARBURST	  ),  // Burst type
-    .M_ARLOCK	(M_ARLOCK	  ),  // Atomic access information
-    .M_ARCACHE	(M_ARCACHE	  ),  // Cachable/bufferable infor
-    .M_ARPROT	(M_ARPROT	  ),  // Protection info
-    .M_ARQOS	(M_ARQOS	  ),  // Quality of Service
-    .M_ARREGION	(M_ARREGION	  ),  // Region signaling
-    .M_ARUSER	(M_ARUSER	  ),  // User defined signal
+    .M_ARVALID	(M_ARVALID	        ),  // address/control valid handshake
+    .M_ARREADY	(M_ARREADY	        ),  // Read addr ready
+    .M_ARADDR	(M_ARADDR	        ),  // Address Read
+    .M_ARID		(M_ARID		        ),  // Read addr ID
+    .M_ARLEN	(M_ARLEN	        ),  // Transfer length
+    .M_ARSIZE	(M_ARSIZE	        ),  // Transfer width
+    .M_ARBURST	(M_ARBURST	        ),  // Burst type
+    .M_ARLOCK	(M_ARLOCK	        ),  // Atomic access information
+    .M_ARCACHE	(M_ARCACHE	        ),  // Cachable/bufferable infor
+    .M_ARPROT	(M_ARPROT	        ),  // Protection info
+    .M_ARQOS	(M_ARQOS	        ),  // Quality of Service
+    .M_ARREGION	(M_ARREGION	        ),  // Region signaling
+    .M_ARUSER	(M_ARUSER	        ),  // User defined signal
  
     //Read data channel
-    .M_RVALID	(M_RVALID	  ),  // Read data valid 
-    .M_RREADY	(M_RREADY	  ),  // Read data ready (to Slave)
-    .M_RDATA	(M_RDATA	  ),  // Read data bus
-    .M_RLAST	(M_RLAST	  ),  // Last beat of a burst transfer
-    .M_RID		(M_RID		  ),  // Read ID
-    .M_RUSER	(M_RUSER	  ),  // User defined signal
-    .M_RRESP	(M_RRESP	  ),  // Read response
+    .M_RVALID	(M_RVALID	        ),  // Read data valid 
+    .M_RREADY	(M_RREADY	        ),  // Read data ready (to Slave)
+    .M_RDATA	(M_RDATA	        ),  // Read data bus
+    .M_RLAST	(M_RLAST	        ),  // Last beat of a burst transfer
+    .M_RID		(M_RID		        ),  // Read ID
+    .M_RUSER	(M_RUSER	        ),  // User defined signal
+    .M_RRESP	(M_RRESP	        ),  // Read response
      
     //Functional Ports
     .start_dma	(ctrl_read          ),
@@ -932,45 +989,45 @@ axi_dma_wr #(
         .AXI_WIDTH_DS(AXI_WIDTH_DS)   // data strobe width
     )
 u_dma_write(
-    .M_AWID		(M_AWID		),  // Address ID
-    .M_AWADDR	(M_AWADDR	),  // Address Write
-    .M_AWLEN	(M_AWLEN	),  // Transfer length
-    .M_AWSIZE	(M_AWSIZE	),  // Transfer width
-    .M_AWBURST	(M_AWBURST	),  // Burst type
-    .M_AWLOCK	(M_AWLOCK	),  // Atomic access information
-    .M_AWCACHE	(M_AWCACHE	),  // Cachable/bufferable infor
-    .M_AWPROT	(M_AWPROT	),  // Protection info
-    .M_AWREGION	(M_AWREGION	),
-    .M_AWQOS	(M_AWQOS	),
-    .M_AWVALID	(M_AWVALID	),  // address/control valid handshake
-    .M_AWREADY	(M_AWREADY	),
-    .M_AWUSER   (           ),
+    .M_AWID		 (M_AWID	),  // Address ID
+    .M_AWADDR	 (M_AWADDR	),  // Address Write
+    .M_AWLEN	 (M_AWLEN	),  // Transfer length
+    .M_AWSIZE	 (M_AWSIZE	),  // Transfer width
+    .M_AWBURST	 (M_AWBURST	),  // Burst type
+    .M_AWLOCK	 (M_AWLOCK	),  // Atomic access information
+    .M_AWCACHE	 (M_AWCACHE	),  // Cachable/bufferable infor
+    .M_AWPROT	 (M_AWPROT	),  // Protection info
+    .M_AWREGION	 (M_AWREGION),
+    .M_AWQOS	 (M_AWQOS	),
+    .M_AWVALID	 (M_AWVALID	),  // address/control valid handshake
+    .M_AWREADY	 (M_AWREADY	),
+    .M_AWUSER    (          ),
     //Write data channel
-    .M_WID		(M_WID		),  // Write ID
-    .M_WDATA	(M_WDATA	),  // Write Data bus
-    .M_WSTRB	(M_WSTRB	),  // Write Data byte lane strobes
-    .M_WLAST	(M_WLAST	),  // Last beat of a burst transfer
-    .M_WVALID	(M_WVALID	),  // Write data valid
-    .M_WREADY	(M_WREADY	),  // Write data ready
-    .M_WUSER    (           ),
-    .M_BUSER    (           ),    
+    .M_WID		 (M_WID		),  // Write ID
+    .M_WDATA	 (M_WDATA	),  // Write Data bus
+    .M_WSTRB	 (M_WSTRB	),  // Write Data byte lane strobes
+    .M_WLAST	 (M_WLAST	),  // Last beat of a burst transfer
+    .M_WVALID	 (M_WVALID	),  // Write data valid
+    .M_WREADY	 (M_WREADY	),  // Write data ready
+    .M_WUSER     (          ),
+    .M_BUSER     (          ),    
     //Write response chaDnel
-    .M_BID		(M_BID		),  // buffered response ID
-    .M_BRESP	(M_BRESP	),  // Buffered write response
-    .M_BVALID	(M_BVALID	),  // Response info valid
-    .M_BREADY	(M_BREADY	),  // Response info ready (to slave)
+    .M_BID		 (M_BID		),  // buffered response ID
+    .M_BRESP	 (M_BRESP	),  // Buffered write response
+    .M_BVALID	 (M_BVALID	),  // Response info valid
+    .M_BREADY	 (M_BREADY	),  // Response info ready (to slave)
     //Read address channDl
     //User interface
-    .start_dma	(ctrl_write     ),
-    .num_trans	(num_trans      ), //Number of words transferred
-    .start_addr	(write_addr     ),
-    .indata		(write_data     ),
+    .start_dma	 (ctrl_write    ),
+    .num_trans	 (num_trans     ), //Number of words transferred
+    .start_addr	 (write_addr    ),
+    .indata	     (write_data    ),
     .indata_req_o(indata_req_wr ),
-    .done_o		(write_done     ), //Blk transfer done
-    .fail_check (               ),
+    .done_o		 (write_done     ), //Blk transfer done
+    .fail_check  (               ),
     //User signals
-    .clk        (clk            ),
-    .rstn       (rstn           )
+    .clk         (clk            ),
+    .rstn        (rstn           )
 );
 
 //--------------------------------------------------------------------
@@ -1009,7 +1066,7 @@ wire                        is_last_col;
 wire                        is_first_chn;
 wire                        is_last_chn; 
 
-wire                        layer_done;
+// wire                        layer_done;
 wire                        bm_csync_done;
 wire                        pe_csync_done;
 
@@ -1093,6 +1150,7 @@ buffer_manager u_buffer_manager (
     .q_row_stride       (q_row_stride       ),
 
     .q_maxpool          (q_maxpool          ),
+    .q_maxpool_stride   (q_maxpool_stride   ),
     .q_upsample         (q_upsample         ),
 
     .q_load_ifm         (q_load_ifm         ),
@@ -1236,9 +1294,9 @@ maxpool u_maxpool (
     .rstn               (rstn               ),
 
     // maxpool <-> top
-    .q_width            (q_width            ),
-    .q_height           (q_height           ),
     .q_channel_out      (q_channel_out      ),
+
+    .q_maxpool_stride   (q_maxpool_stride   ),
 
     // maxpool <-> postprocessor
     .pp_data_vld        (pp_data_vld        ),

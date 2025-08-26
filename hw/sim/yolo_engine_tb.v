@@ -5,8 +5,8 @@ module yolo_engine_tb;
 
 // select test case
 // `define TESTCASE_0 1
-`define TESTCASE_1 1
-// `define TESTCASE_2 1
+// `define TESTCASE_1 1
+`define TESTCASE_2 1
 
 
 // `include "define.v"
@@ -276,12 +276,14 @@ end
 `include "controller_params.vh"
 reg  [`PSUM_DW-1:0]          expect_conv [0:65536-1];
 reg  [`OFM_DW-1:0]           expect_aff  [0:65536-1];
-reg  [`OFM_DW-1:0]           expect_mp   [0:65536-1];
+reg  [`OFM_DW-1:0]           expect_mp1  [0:65536-1];
+reg  [`OFM_DW-1:0]           expect_mp2  [0:65536-1];
         
 initial begin 
     $readmemh(`TEST_EXP_CONV_PATH, expect_conv);
     $readmemh(`TEST_EXP_AFFINE_PATH, expect_aff);
-    $readmemh(`TEST_EXP_MAXPOOL_PATH, expect_mp);
+    $readmemh(`TEST_EXP_MAXPOOL_STRIDE1_PATH, expect_mp1);
+    $readmemh(`TEST_EXP_MAXPOOL_STRIDE2_PATH, expect_mp2);
 end
 
 
@@ -440,13 +442,24 @@ task automatic tb_check_maxpool_result;
         checks    = 0;
         max_print = 50;
         printed   = 0;
-        exp_words = `TEST_ROW/2 * `TEST_COL/2 * `TEST_T_CHNOUT;
         $display("============================================================");
         $display("MAXPOOL CHECK START");
+        if (u_yolo_engine.q_maxpool_stride == 1) begin 
+            $display("STRIDE = 1");
+            exp_words = `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
+        end else if (u_yolo_engine.q_maxpool_stride == 2) begin 
+            $display("STRIDE = 2");
+            exp_words = `TEST_ROW/2 * `TEST_COL/2 * `TEST_T_CHNOUT;
+        end
+
 
         for (i = 0; i < exp_words; i = i + 1) begin
             got = cap_mp_mem[i]; 
-            exp = expect_mp[i]; 
+            if (u_yolo_engine.q_maxpool_stride == 1) begin 
+                exp = expect_mp1[i];
+            end else if (u_yolo_engine.q_maxpool_stride == 2) begin 
+                exp = expect_mp2[i];
+            end
             if (got !== exp) begin
                 errors = errors + 1;
                 if (printed < max_print) begin

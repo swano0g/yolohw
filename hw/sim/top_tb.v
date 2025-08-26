@@ -820,14 +820,15 @@ module top_tb;
             checks    = 0;
             max_print = 50;
             printed   = 0;
-            if (mp_stride == 1) begin 
-                exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
-            end else if (mp_stride == 2) begin 
-                exp_words = TEST_ROW/2 * TEST_COL/2 * TEST_T_CHNOUT;
-            end
-            
             $display("============================================================");
             $display("MAXPOOL CHECK START");
+            if (mp_stride == 1) begin 
+                $display("MAXPOOL STRIDE = 2");
+                exp_words = TEST_ROW * TEST_COL * TEST_T_CHNOUT;
+            end else if (mp_stride == 2) begin 
+                $display("MAXPOOL STRIDE = 1");
+                exp_words = TEST_ROW/2 * TEST_COL/2 * TEST_T_CHNOUT;
+            end
 
             for (i = 0; i < exp_words; i = i + 1) begin
                 got = cap_mp_mem[i]; 
