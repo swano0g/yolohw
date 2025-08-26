@@ -45,7 +45,7 @@ module pe_engine #(
     input  wire                         c_is_first_chn,
     input  wire                         c_is_last_chn,
 
-    input  wire [W_SIZE-1:0]            q_channel,      // tiled input channel
+    input  wire [W_CHANNEL-1:0]         q_channel,      // tiled input channel
 
     output wire                         o_pe_csync_done,
 
