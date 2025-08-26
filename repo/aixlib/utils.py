@@ -7,7 +7,7 @@ from typing import Any, List
 KERNEL_SIZE = 3  # 3x3
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class TCParams:
     testcase_no: int
     width: int
@@ -22,6 +22,7 @@ class TCParams:
     out_feamap_dir: Path
     out_param_packed_dir: Path
     out_expect_dir: Path
+    out_dram_dir: Path
     out_ifm_hex: Path
     out_weight_hex: Path
     out_affine_hex: Path
@@ -119,6 +120,7 @@ def load_params(args_path: Path) -> TCParams:
         out_feamap_dir=out_feamap_dir,
         out_param_packed_dir=out_param_packed_dir,
         out_expect_dir=out_expect_dir,
+        out_dram_dir=out_dram_dir,
         out_ifm_hex=out_ifm_hex,
         out_weight_hex=out_weight_hex,
         out_affine_hex=out_affine_hex,

@@ -32,7 +32,7 @@ def _split32_to_16_lines(lines32: List[str]) -> List[str]:
 
 
 
-def memory_builder_monolayer(params: TCParams, ifm_src: list[str], filt_src: list[str], affine_src: list[str]) -> dict:
+def memory_builder_monolayer(params: TCParams, ifm_src: list[str], filt_src: list[str], bias_src: list[str], scale_src: list[str]) -> dict:
     """
     단일 레이어 연산을 위한 memory builder\n
     섹션 순서: IFM -> FILTER -> BIAS -> SCALE\n
@@ -52,8 +52,8 @@ def memory_builder_monolayer(params: TCParams, ifm_src: list[str], filt_src: lis
     
     ifm_lines   = list(ifm_src)
     filt_lines  = list(filt_src)
-    bias_lines  = list(affine_src[:M])
-    scale_lines = list(affine_src[M:M*2])
+    bias_lines  = list(bias_src)
+    scale_lines = list(scale_src)
 
     # --- 16줄 정렬 패딩 및 오프셋 계산(32b 기준) ---
     start_ifm = 0
