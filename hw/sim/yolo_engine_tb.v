@@ -262,6 +262,7 @@ initial begin
    #(100*CLK_PERIOD) 
         @(posedge clk)
             i_0 = 32'd3; // ... _0011  debug_monolayer
+            // i_0 = 32'd5; // ... _0101  debug_multlayer
 
    #(100*CLK_PERIOD) 
          @(posedge clk)
