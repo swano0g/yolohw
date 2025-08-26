@@ -217,8 +217,10 @@ always @(posedge clk or negedge rstn) begin
         layer_done <= 0;
     end
     else begin
-        if (cstate == ST_PSYNC && nstate == ST_IDLE)
+        layer_done <= 0; // pulse
+        if (cstate == ST_PSYNC && nstate == ST_IDLE) begin
             layer_done <= 1;
+        end
     end
 end
 
