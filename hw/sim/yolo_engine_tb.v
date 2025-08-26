@@ -261,7 +261,7 @@ initial begin
    #(4*CLK_PERIOD) rstn = 1'b1; 
    #(100*CLK_PERIOD) 
         @(posedge clk)
-            i_0 = 32'd3; // ... _0011
+            i_0 = 32'd3; // ... _0011  debug_monolayer
 
    #(100*CLK_PERIOD) 
          @(posedge clk)
