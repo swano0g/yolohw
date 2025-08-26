@@ -122,6 +122,9 @@ localparam BIT_TRANS = 18;
 //================================================================
 // 1) Parse control signals
 //================================================================
+reg  debug_monolayer;
+reg  debug_multlayer;
+
 //CSR
 reg ap_start;
 reg ap_ready;
@@ -140,7 +143,7 @@ reg [AXI_WIDTH_AD-1:0] dram_base_addr_bias;
 reg [AXI_WIDTH_AD-1:0] dram_base_addr_scale;
 reg [AXI_WIDTH_AD-1:0] dram_base_addr_ofm;
 
-reg  debug_on;
+
 
 always @ (*) begin
     // ap_done     = ctrl_write_done;
@@ -177,7 +180,8 @@ end
 // Parse the control registers
 always @ (posedge clk or negedge rstn) begin
     if(~rstn) begin
-        debug_on          <= 0;
+        debug_monolayer   <= 0;
+        debug_multlayer   <= 0;
         dram_base_addr_rd <= 0;
         dram_base_addr_wr <= 0;
         reserved_register <= 0; // unused 
@@ -207,7 +211,8 @@ always @ (posedge clk or negedge rstn) begin
             dma_scale_rd_base_addr  <= i_ctrl_reg1 + DRAM_SCALE_OFFSET;
 
 
-            debug_on <= i_ctrl_reg0[1];
+            debug_monolayer <= i_ctrl_reg0[1];
+            debug_multlayer <= i_ctrl_reg0[2];
 
         end 
         else if (ap_done) begin 
@@ -221,7 +226,8 @@ always @ (posedge clk or negedge rstn) begin
             dram_base_addr_scale  <= 0;
             dram_base_addr_ofm    <= 0;
 
-            debug_on <= 0;
+            debug_monolayer   <= 0;
+            debug_multlayer   <= 0;
         end 
     end 
 end
@@ -242,15 +248,30 @@ function [15:0] blk16;
 endfunction
 
 
-                    // q_width         <= TEST_COL;       // 16
-                    // q_height        <= TEST_ROW;       // 16
-                    // q_channel       <= TEST_T_CHNIN;   // 16 (4)
-                    // q_channel_out   <= TEST_T_CHNOUT;  // 32 (8) 
-                    // q_frame_size    <= `TEST_ROW * `TEST_COL * `TEST_T_CHNIN
-                    // q_row_stride    <= TEST_COL * TEST_T_CHNIN;
+function [W_SIZE-1:0] fit_wsize;
+    input [63:0] x;
+    begin
+        fit_wsize = x[W_SIZE-1:0];     // 자동 truncate/zero-extend
+    end
+endfunction
+
+function [W_CHANNEL-1:0] fit_wch;
+    input [63:0] x; 
+    begin fit_wch = x[W_CHANNEL-1:0]; end
+endfunction
+
+function [W_FRAME_SIZE-1:0] fit_wframe;
+    input [63:0] x; 
+    begin fit_wframe = x[W_FRAME_SIZE-1:0]; end
+endfunction
+
+function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
+    input [63:0] x;
+    begin fit_row_stride = x[W_SIZE+W_CHANNEL-1:0]; end
+endfunction
 
 
-//        {q_upsample, q_maxpool, q_maxpool_stride, q_row_stride, q_frame_size, q_channel_out, q_channel, q_height, w_width}
+// {q_upsample, q_maxpool, q_maxpool_stride, q_row_stride, q_frame_size, q_channel_out, q_channel, q_height, q_width}
 
 localparam W_ENTRY = 1                  // q_upsample
                    + 1                  // q_maxpool
@@ -262,86 +283,149 @@ localparam W_ENTRY = 1                  // q_upsample
                    + W_SIZE             // q_height
                    + W_SIZE;            // q_width
 
+function [W_ENTRY-1:0] layer_entry;
+    input [4:0] q_layer;
+    begin
+        case (q_layer)
+        5'd0: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                   // maxpool_stride
+                fit_row_stride(256),    // row_stride
+                fit_wframe(65536),      // frame_size
+                fit_wch(4),             // channel_out
+                fit_wch(1),             // channel (in)
+                fit_wsize(256),         // height
+                fit_wsize(256)          // width
+                };
+        5'd1: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                   // maxpool_stride
+                fit_row_stride(512),    // row_stride
+                fit_wframe(65536),      // frame_size
+                fit_wch(8),             // channel_out
+                fit_wch(4),             // channel (in)
+                fit_wsize(128),         // height
+                fit_wsize(128)          // width
+                };
+        5'd2: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                   // maxpool_stride
+                fit_row_stride(512),    // row_stride
+                fit_wframe(32768),      // frame_size
+                fit_wch(16),            // channel_out
+                fit_wch(8),             // channel (in)
+                fit_wsize(64),          // height
+                fit_wsize(64)           // width
+                };
+        5'd3: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                   // maxpool_stride
+                fit_row_stride(512),    // row_stride
+                fit_wframe(16384),      // frame_size
+                fit_wch(32),            // channel_out
+                fit_wch(16),            // channel (in)
+                fit_wsize(32),          // height
+                fit_wsize(32)           // width
+                };
+        5'd4: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                   // maxpool_stride
+                fit_row_stride(512),    // row_stride
+                fit_wframe(8192),       // frame_size
+                fit_wch(64),            // channel_out
+                fit_wch(32),            // channel (in)
+                fit_wsize(16),          // height
+                fit_wsize(16)           // width
+                };
+        5'd5: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd1,                   // maxpool_stride
+                fit_row_stride(512),    // row_stride
+                fit_wframe(4096),       // frame_size
+                fit_wch(128),           // channel_out
+                fit_wch(64),            // channel (in)
+                fit_wsize(8),           // height
+                fit_wsize(8)            // width
+                };
+        5'd6: layer_entry = {
+                1'b0,                   // upsample
+                1'b0,                   // maxpool
+                2'd0,                   // maxpool_stride
+                fit_row_stride(1024),   // row_stride
+                fit_wframe(8192),       // frame_size
+                fit_wch(64),            // channel_out
+                fit_wch(128),           // channel (in)
+                fit_wsize(8),           // height
+                fit_wsize(8)            // width
+                };
+        5'd7: layer_entry = {
+                1'b0,                   // upsample
+                1'b0,                   // maxpool
+                2'd0,                   // maxpool_stride
+                fit_row_stride(512),    // row_stride
+                fit_wframe(4096),       // frame_size
+                fit_wch(128),           // channel_out
+                fit_wch(64),            // channel (in)
+                fit_wsize(8),           // height
+                fit_wsize(8)            // width
+                };
+        5'd8: layer_entry = {
+                1'b0,                   // upsample
+                1'b0,                   // maxpool
+                2'd0,                   // maxpool_stride
+                fit_row_stride(1024),   // row_stride
+                fit_wframe(8192),       // frame_size
+                fit_wch(49),            // channel_out
+                fit_wch(128),           // channel (in)
+                fit_wsize(8),           // height
+                fit_wsize(8)            // width
+                };
 
-// function [W_ENTRY-1:0] layer_entry;
-//     input [4:0] q_layer;
-//     begin
-//         case (q_layer)
-//         5'd0: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd2         // maxpool_stride
-//                 'd256,      // row_stride
-//                 'd65536,    // frame_size
-//                 'd4,        // channel_out
-//                 'd1,        // channel (in)
-//                 'd256,      // height
-//                 'd256       // width
-//                 };
-//         5'd1: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd512,      // row_stride
-//                 'd65536,    // frame_size
-//                 'd8,        // channel_out
-//                 'd4,        // channel (in)
-//                 'd128,      // height
-//                 'd128       // width
-//                 };
-//         5'd2: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd512,      // row_stride
-//                 'd32768,    // frame_size
-//                 'd16,        // channel_out
-//                 'd8,        // channel (in)
-//                 'd64,      // height
-//                 'd64       // width
-//                 };
-//         5'd3: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd512,      // row_stride
-//                 'd16384,    // frame_size
-//                 'd32,        // channel_out
-//                 'd16,        // channel (in)
-//                 'd32,      // height
-//                 'd32       // width
-//                 };
-//         5'd4: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd512,      // row_stride
-//                 'd8192,    // frame_size
-//                 'd64,        // channel_out
-//                 'd32,        // channel (in)
-//                 'd16,      // height
-//                 'd16       // width
-//                 };
-//         5'd4: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd512,      // row_stride
-//                 'd8192,    // frame_size
-//                 'd64,        // channel_out
-//                 'd32,        // channel (in)
-//                 'd16,      // height
-//                 'd16       // width
-//                 };
-//         5'd5: layer_entry = {
-//                 'b0,        // upsample
-//                 'b1,        // maxpool
-//                 'd512,      // row_stride
-//                 'd8192,    // frame_size
-//                 'd64,        // channel_out
-//                 'd32,        // channel (in)
-//                 'd16,      // height
-//                 'd16       // width
-//                 };
-//         default: layer_entry = {W_ENTRY{1'b0}};
-//         endcase
-//     end
-// endfunction
+        // debug multi layer
+        5'd20: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                   // maxpool_stride
+                fit_row_stride(64),     // row_stride
+                fit_wframe(1024),       // frame_size
+                fit_wch(8),             // channel_out
+                fit_wch(4),             // channel (in)
+                fit_wsize(16),          // height
+                fit_wsize(16)           // width
+                };
+        5'd21: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd1,                   // maxpool_stride
+                fit_row_stride(64),     // row_stride
+                fit_wframe(512),        // frame_size
+                fit_wch(16),            // channel_out
+                fit_wch(8),             // channel (in)
+                fit_wsize(8),           // height
+                fit_wsize(8)            // width
+                };
+        // debug mono layer
+        5'd22: layer_entry = {
+                1'b0,                   // upsample
+                1'b1,                   // maxpool
+                2'd2,                                   // maxpool_stride
+                fit_row_stride(TEST_COL*TEST_T_CHNIN),  // row_stride
+                fit_wframe(TEST_FRAME_SIZE),        // frame_size
+                fit_wch(TEST_T_CHNOUT),            // channel_out
+                fit_wch(TEST_T_CHNIN),             // channel (in)
+                fit_wsize(TEST_ROW),           // height
+                fit_wsize(TEST_COL)            // width
+                };
+        default: layer_entry = {W_ENTRY{1'b0}};
+        endcase
+    end
+endfunction
 
 
 
@@ -368,6 +452,8 @@ reg                         q_load_ifm;
 reg                         q_load_filter;
 reg                         q_load_bias;
 reg                         q_load_scale;
+
+reg                         q_fm_buf_switch;
 
 
 // 관찰용 완료 신호(하위에서 만들어 줘야 함)
@@ -412,16 +498,26 @@ always @(posedge clk or negedge rstn) begin
         q_load_bias     <= 0;
         q_load_scale    <= 0;
 
+        q_fm_buf_switch <= 0;
+
         // layer info reset...
 
     end
     else begin
         q_c_ctrl_start <= 1'b0; // pulse
+        q_fm_buf_switch <= 0; // pulse
 
         case (q_state)
             S_IDLE: begin
                 if (ap_start) begin
-                    q_layer     <= 0;
+                    if (debug_monolayer) begin 
+                        q_layer <= 5'd22;
+                    end else if (debug_multlayer) begin 
+                        q_layer <= 5'd20;
+                    end else begin 
+                        q_layer <= 0;
+                    end
+                    
                     q_state     <= S_LOAD_CFG;
                 end
             end
@@ -436,30 +532,19 @@ always @(posedge clk or negedge rstn) begin
             end            
             
             S_LOAD_CFG: begin
-                if (debug_on) begin 
-                    // 우선은 여기로만 들어옴.
-                    q_layer         <= 4'd31;
-                    q_width         <= TEST_COL;       // 16
-                    q_height        <= TEST_ROW;       // 16
-                    q_channel       <= TEST_T_CHNIN;   // 16 (4)
-                    q_channel_out   <= TEST_T_CHNOUT;  // 32 (8) 
-                    q_frame_size    <= TEST_FRAME_SIZE;
-                    q_row_stride    <= TEST_COL * TEST_T_CHNIN;
-                    q_maxpool       <= 1;
-                    q_maxpool_stride<= 2;
-                    // 만약 레이어가 늘어나면 분기하는 로직이 필요함.
+                {q_upsample, q_maxpool, q_maxpool_stride, q_row_stride, q_frame_size, q_channel_out, q_channel, q_height, q_width} <= layer_entry(q_layer);
+
+                if (q_layer == 5'd20 || q_layer == 5'd22) begin 
+                    // debug start layer
+                    q_state <= S_LOAD_IFM;
+                end else if (q_layer == 5'd0) begin 
                     q_state <= S_LOAD_IFM;
                 end else begin 
-                    // layer 정보 불러오기 
-                    // a. q_* reg 에 값 할당
-                    // b. dram base addr fix
-                    // layer 0면 LOAD_IFM으로 전이
-                    // 그 외 layer면 q_c_ctrl_start = 1로 바꾸고 (1cycle) WAIT_CNN_CTRL로 전이
-                    // special layer 처리
-
-
-                    // 아직 구현할 필요 없음 
+                    q_c_ctrl_start <= 1'b1;
+                    q_state <= S_WAIT_CNN_CTRL;
                 end
+                
+                // special layer 처리
             end
 
             S_SAVE_OFM: begin 
@@ -470,14 +555,18 @@ always @(posedge clk or negedge rstn) begin
 
             S_WAIT_CNN_CTRL: begin 
                 if (layer_done) begin 
-                    // bebug end
-                    if (q_layer == 4'd31) begin 
+                    if (q_layer == 5'd21) begin 
+                        // bebug multilayer end
                         q_state <= S_IDLE;
                         ap_done <= 1;
-                    end
-                    else begin 
-                        // layer_done -> q_layer 올리고 S_LOAD_CFG로 전이
-                        // 아직 구현할 필요 없음
+                    end else if (q_layer == 5'd22) begin 
+                        // bebug multilayer end
+                        q_state <= S_IDLE;
+                        ap_done <= 1;
+                    end else begin 
+                        q_layer <= q_layer + 1;
+                        q_fm_buf_switch <= 1;
+                        q_state <= S_LOAD_CFG;
                     end
                 end
             end
@@ -1155,6 +1244,8 @@ buffer_manager u_buffer_manager (
 
     .q_load_ifm         (q_load_ifm         ),
     .q_load_filter      (q_load_filter      ),
+
+    .q_fm_buf_switch    (q_fm_buf_switch    ),
 
     // Buffer Manager <-> AXI (IFM/FILTER)
     .read_data          (axi_read_data      ),
