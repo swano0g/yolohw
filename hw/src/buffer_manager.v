@@ -44,6 +44,7 @@ module buffer_manager #(
     input  wire [W_SIZE+W_CHANNEL-1:0]  q_row_stride,   // q_width * q_channel
 
     input  wire                         q_maxpool,
+    input  wire [1:0]                   q_maxpool_stride,
     input  wire                         q_upsample,
 
     input  wire                         q_load_ifm,     // ifm load start
@@ -206,10 +207,12 @@ assign ofm_buf_write_data   = ofm_data;
 assign ofm_buf_wea          = ofm_data_vld;
 
 
-wire [W_SIZE-1:0] eff_w = q_maxpool  ? (q_width  >> 1) 
+wire [W_SIZE-1:0] eff_w = q_maxpool  ? (q_maxpool_stride == 2) ? (q_width >> 1) 
+                                                               : q_width
                         : q_upsample ? (q_width  << 1) 
                         : q_width;
-wire [W_SIZE-1:0] eff_h = q_maxpool  ? (q_height >> 1) 
+wire [W_SIZE-1:0] eff_h = q_maxpool  ? (q_maxpool_stride == 2) ? (q_height >> 1)
+                                                               : q_height
                         : q_upsample ? (q_height << 1)
                         : q_height;
 
