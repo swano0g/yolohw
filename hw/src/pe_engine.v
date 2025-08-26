@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
 `include "controller_params.vh"
-`include "sim_cfg.vh"
 
 
 module pe_engine #(
@@ -46,7 +45,7 @@ module pe_engine #(
     input  wire                         c_is_first_chn,
     input  wire                         c_is_last_chn,
 
-    input  wire [W_SIZE-1:0]            q_channel,      // tiled input channel
+    input  wire [W_CHANNEL-1:0]         q_channel,      // tiled input channel
 
     output wire                         o_pe_csync_done,
 
@@ -75,12 +74,13 @@ module pe_engine #(
     output wire [W_SIZE-1:0]            o_pe_col,
     output wire [W_CHANNEL-1:0]         o_pe_chn,
     output wire [W_CHANNEL-1:0]         o_pe_chn_out,
+    output wire                         o_pe_is_first_chn,
     output wire                         o_pe_is_last_chn 
 
 );
 
-localparam  IB_DELAY           = BM_DELAY;  // 2 calculate index -> buf -> pe
-localparam  FB_DELAY           = 1;
+localparam  IB_DELAY            = BM_DELAY;  // 2 calculate index -> buf -> pe
+localparam  FB_DELAY            = 1;
 localparam  PE_DATA_DELAY       = 1;  // pe save data
 localparam  PE_WINDOW_DELAY     = 1;  // load window
 
@@ -269,15 +269,16 @@ assign o_pe_csync_done = filter_loaded & c_ctrl_csync_run;
 
 // 4. outputs to postprocessor
 wire [PE_ACCO_FLAT_BW-1:0] acc_flat;
-wire                   vld;
+wire                       vld;
 
-assign o_pe_data        = acc_flat;
-assign o_pe_vld         = vld;
-assign o_pe_row         = row_pipe[STG-1];
-assign o_pe_col         = col_pipe[STG-1];
-assign o_pe_chn         = chn_pipe[STG-1];
-assign o_pe_chn_out     = chn_out_pipe[STG-1];
-assign o_pe_is_last_chn = chn_location_pipe[STG-1][1];
+assign o_pe_data         = acc_flat;
+assign o_pe_vld          = vld;
+assign o_pe_row          = row_pipe[STG-1];
+assign o_pe_col          = col_pipe[STG-1];
+assign o_pe_chn          = chn_pipe[STG-1];
+assign o_pe_chn_out      = chn_out_pipe[STG-1];
+assign o_pe_is_first_chn = chn_location_pipe[STG-1][0];
+assign o_pe_is_last_chn  = chn_location_pipe[STG-1][1];
 
 
 // 5. DUT: conv_pe
