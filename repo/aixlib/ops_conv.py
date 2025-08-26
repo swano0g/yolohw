@@ -147,10 +147,10 @@ def maxpool_from_affine_words(
     H: int,
     W: int,
     M: int,
+    stride: int
 ) -> list[str]:
     
     kernel = 2
-    stride = 2
     N = M * W * H
     
     arr = []
@@ -173,18 +173,30 @@ def maxpool_from_affine_words(
     ofm = ofm.transpose(2, 0, 1) 
     
     
-    # 2) maxpool (VALID, padding 없음)
-    outH = 1 + (H - kernel) // stride
-    outW = 1 + (W - kernel) // stride
-    mp_out = np.zeros((M, outH, outW), dtype=np.uint8)
+    if stride == 1:
+        outH, outW = H, W
+        # top/left에만 zero padding 1칸
+        pad = np.pad(ofm, ((0,0), (1,0), (1,0)), mode='constant', constant_values=0)
+        mp_out = np.empty((M, outH, outW), dtype=np.uint8)
+        for m in range(M):
+            for y in range(outH):
+                for x in range(outW):
+                    window = pad[m, y:y+2, x:x+2]
+                    mp_out[m, y, x] = window.max()
     
-    for m in range(M):
-        for oy in range(outH):
-            ys = oy * stride
-            for ox in range(outW):
-                xs = ox * stride
-                window = ofm[m, ys:ys+kernel, xs:xs+kernel]
-                mp_out[m, oy, ox] = window.max()
+    else:
+        # 2) maxpool (VALID, padding 없음)
+        outH = 1 + (H - kernel) // stride
+        outW = 1 + (W - kernel) // stride
+        mp_out = np.zeros((M, outH, outW), dtype=np.uint8)
+        
+        for m in range(M):
+            for oy in range(outH):
+                ys = oy * stride
+                for ox in range(outW):
+                    xs = ox * stride
+                    window = ofm[m, ys:ys+kernel, xs:xs+kernel]
+                    mp_out[m, oy, ox] = window.max()
                 
                 
     out_words: list[str] = []
@@ -192,8 +204,6 @@ def maxpool_from_affine_words(
     acc = 0
     cnt = 0
     
-
-        
     for y in range(outH):
         for x in range(outW):
             for m in range(M):

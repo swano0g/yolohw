@@ -41,8 +41,8 @@ def main():
     
     conv_result   = run_conv(ifm_data, filt_72b_data, params.height, params.width, params.cin, params.cout)
     affine_result = run_affine_from_conv(conv_result, affine_data, params.height, params.width, params.cout)
-    maxpool_result = maxpool_from_affine_words(affine_result, params.height, params.width, params.cout)
-    
+    maxpool_stride2_result = maxpool_from_affine_words(affine_result, params.height, params.width, params.cout, stride=2)
+    maxpool_stride1_result = maxpool_from_affine_words(affine_result, params.height, params.width, params.cout, stride=1)
     
     write_hex_lines(params.out_ifm_hex, ifm_data)
     write_hex_lines(params.out_weight_hex, filt_32b_data)
@@ -50,7 +50,8 @@ def main():
     
     write_hex_lines(params.out_conv_result_hex, conv_result)
     write_hex_lines(params.out_affine_result_hex, affine_result)
-    write_hex_lines(params.out_maxpool_result_hex, maxpool_result)
+    write_hex_lines(params.out_maxpool_stride1_result_hex, maxpool_stride1_result)
+    write_hex_lines(params.out_maxpool_stride2_result_hex, maxpool_stride2_result)
     
     
     

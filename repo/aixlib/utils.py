@@ -27,7 +27,8 @@ class TCParams:
     out_affine_hex: Path
     out_conv_result_hex: Path
     out_affine_result_hex: Path
-    out_maxpool_result_hex: Path
+    out_maxpool_stride1_result_hex: Path
+    out_maxpool_stride2_result_hex: Path
     out_upsample_result_hex: Path
     out_golden_hex: Path
     out_memory_hex: Path
@@ -104,7 +105,8 @@ def load_params(args_path: Path) -> TCParams:
     
     out_conv_result_hex = out_expect_dir     / f"test{tc_no}_conv_result_32b.hex"
     out_affine_result_hex = out_expect_dir   / f"test{tc_no}_affine_result_32b.hex"
-    out_maxpool_result_hex = out_expect_dir  / f"test{tc_no}_maxpool_result_32b.hex"
+    out_maxpool_stride1_result_hex = out_expect_dir  / f"test{tc_no}_maxpool_stride1_result_32b.hex"
+    out_maxpool_stride2_result_hex = out_expect_dir  / f"test{tc_no}_maxpool_stride2_result_32b.hex"
     out_upsample_result_hex = out_expect_dir / f"test{tc_no}_upsample_result_32b.hex"
     
     out_golden_hex = out_expect_dir        / f"test{tc_no}_output_32b.hex"
@@ -122,7 +124,8 @@ def load_params(args_path: Path) -> TCParams:
         out_affine_hex=out_affine_hex,
         out_conv_result_hex=out_conv_result_hex,
         out_affine_result_hex=out_affine_result_hex,
-        out_maxpool_result_hex=out_maxpool_result_hex,
+        out_maxpool_stride1_result_hex=out_maxpool_stride1_result_hex,
+        out_maxpool_stride2_result_hex=out_maxpool_stride2_result_hex,
         out_upsample_result_hex=out_upsample_result_hex,
         out_golden_hex=out_golden_hex,
         out_memory_hex=out_memory_hex,
