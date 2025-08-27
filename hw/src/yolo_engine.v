@@ -53,9 +53,7 @@ module yolo_engine #(
     parameter DRAM_FILTER_OFFSET    = 4096,
     parameter DRAM_BIAS_OFFSET      = DRAM_FILTER_OFFSET + 4608,
     parameter DRAM_SCALE_OFFSET     = DRAM_BIAS_OFFSET + 128 
-
-)
-(
+)(
     input                           clk, 
     input                           rstn,
 
@@ -590,9 +588,9 @@ wire                 dma_ctrl_read_done;        // read stream done (1cycle)
 
 wire                 dma_wr_go;
 wire [31:0]          dma_wr_base_addr;
-// write는 아직 미완
-
-
+wire [BIT_TRANS-1:0] dma_wr_num_trans;
+wire [15:0]          dma_wr_max_req_blk_idx;
+wire                 dma_ctrl_write_done;
 
 // 연결선
 // Signals for dma read  
@@ -603,18 +601,19 @@ wire [AXI_WIDTH_DA-1:0] axi_read_data;
 wire                    axi_read_data_vld;
 wire [BIT_TRANS   -1:0] read_data_cnt;
 
+
 // Signals for dma write
-wire ctrl_write_done;
-wire ctrl_write;
-wire write_done;
-wire indata_req_wr;
+
+wire                    ctrl_write;
+wire                    write_done;
+wire                    indata_req_wr;
 wire [BIT_TRANS   -1:0] write_data_cnt;
 wire [AXI_WIDTH_AD-1:0] write_addr;
 wire [AXI_WIDTH_DA-1:0] write_data;
 
 
-wire[BIT_TRANS   -1:0] num_trans        = 16;           // BURST_LENGTH = 16
 
+wire [BIT_TRANS   -1:0] num_trans        = 16;           // BURST_LENGTH = 16
 //================================================================
 // 5) DMA 
 //================================================================
@@ -729,11 +728,6 @@ assign dma_rd_num_trans        = num_trans;
 
 
 assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
-// assign dma_rd_max_req_blk_idx  = (dma_load_cur_sel == SEL_IFM)    ? dma_ifm_rd_max_req_blk_idx
-//                                : (dma_load_cur_sel == SEL_FILTER) ? dma_filter_rd_max_req_blk_idx
-//                                : (dma_load_cur_sel == SEL_BIAS)   ? dma_bias_rd_max_req_blk_idx
-//                                : (dma_load_cur_sel == SEL_SCALE)  ? dma_scale_rd_max_req_blk_idx
-//                                : 0;
 
 
 // 전체 바이트 
@@ -857,7 +851,6 @@ always @(posedge clk or negedge rstn) begin
             // ------------------------------------------------
             // Wait until DMA finishes issuing and receiving all data
             DMA_LOAD_WAIT: begin
-                // Option A: strictly wait for both controls
                 if (dma_ctrl_read_done) begin
                     case (dma_load_cur_sel)
                         SEL_IFM: begin
@@ -973,16 +966,28 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 //----------------------------------------------------------------
-// 5-1) DMA write
+// 5-3) DMA write
 //----------------------------------------------------------------
-// ...
+// User interface
+
+// input  dma_wr_go                 write stream start
+// input  dma_wr_base_addr          write stream base address
+// input  dma_wr_num_trans          data per block, fixed to 16
+// input  dma_wr_max_req_blk_idx    # blocks to write
+// output write_data_cnt            # data written within a block
+// output dma_ctrl_write_done       write stream done
+
+// input  write_data                data to write
+// output indata_req_wr             data request signal
 
 
+
+assign dma_wr_num_trans = num_trans; 
 
 
 
 //================================================================
-// 5) dma instance
+// 6) dma instance
 //================================================================
 //----------------------------------------------------------------
 axi_dma_ctrl #(.BIT_TRANS(BIT_TRANS))
@@ -1004,15 +1009,19 @@ u_dma_ctrl(
 
     // ----------- WRITE PLANE ----------
     .i_wr_start           (dma_wr_go              ),
-    .i_wr_base_addr       (dma_wr_base_addr       ), //dram write address
-    .i_indata_req_wr      (indata_req_wr          ),
-    .o_ctrl_write_done    (ctrl_write_done        ),
+    .i_wr_base_addr       (dma_wr_base_addr       ), // dram write address
+    .i_wr_num_trans       (dma_wr_num_trans       ), // ADD
+    .i_wr_max_req_blk_idx (dma_wr_max_req_blk_idx ), // ADD
+    
+    .o_write_data_cnt     (write_data_cnt         ), // block 내에서 쓴 데이터 개수
+
+    .o_ctrl_write_done    (dma_ctrl_write_done    ),
 
     // DMA Write
     .i_write_done         (write_done             ),
-    .o_ctrl_write         (ctrl_write             ), //when to write
-    .o_write_addr         (write_addr             ),
-    .o_write_data_cnt     (write_data_cnt         )
+    .i_indata_req_wr      (indata_req_wr          ), // data req
+    .o_ctrl_write         (ctrl_write             ), // when to write
+    .o_write_addr         (write_addr             )
 );
 
 
@@ -1112,8 +1121,8 @@ u_dma_write(
     .start_addr	 (write_addr    ),
     .indata	     (write_data    ),
     .indata_req_o(indata_req_wr ),
-    .done_o		 (write_done     ), //Blk transfer done
-    .fail_check  (               ),
+    .done_o		 (write_done    ), //Blk transfer done
+    .fail_check  (              ),
     //User signals
     .clk         (clk            ),
     .rstn        (rstn           )
