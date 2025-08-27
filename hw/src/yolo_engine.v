@@ -482,23 +482,23 @@ always @(posedge clk or negedge rstn) begin
         q_layer          <= 0;
         q_c_ctrl_start   <= 0;
 
-        q_layer         <= 0;
-        q_width         <= 0;
-        q_height        <= 0;
-        q_channel       <= 0;
-        q_channel_out   <= 0;
-        q_frame_size    <= 0;
-        q_row_stride    <= 0;
-        q_maxpool       <= 0;
-        q_maxpool_stride<= 0;
-        q_upsample      <= 0;
+        q_layer          <= 0;
+        q_width          <= 0;
+        q_height         <= 0;
+        q_channel        <= 0;
+        q_channel_out    <= 0;
+        q_frame_size     <= 0;
+        q_row_stride     <= 0;
+        q_maxpool        <= 0;
+        q_maxpool_stride <= 0;
+        q_upsample       <= 0;
 
-        q_load_ifm      <= 0;
-        q_load_filter   <= 0;
-        q_load_bias     <= 0;
-        q_load_scale    <= 0;
+        q_load_ifm       <= 0;
+        q_load_filter    <= 0;
+        q_load_bias      <= 0;
+        q_load_scale     <= 0;
 
-        q_fm_buf_switch <= 0;
+        q_fm_buf_switch  <= 0;
 
         // layer info reset...
 
@@ -1018,13 +1018,13 @@ u_dma_ctrl(
 
 // DMA read module
 axi_dma_rd #(
-        .BITS_TRANS(BIT_TRANS),
-        .OUT_BITS_TRANS(OUT_BITS_TRANS),    
-        .AXI_WIDTH_USER(1),             // Master ID
-        .AXI_WIDTH_ID(4),               // ID width in bits
-        .AXI_WIDTH_AD(AXI_WIDTH_AD),    // address width
-        .AXI_WIDTH_DA(AXI_WIDTH_DA),    // data width
-        .AXI_WIDTH_DS(AXI_WIDTH_DS)     // data strobe width
+    .BITS_TRANS(BIT_TRANS),
+    .OUT_BITS_TRANS(OUT_BITS_TRANS),    
+    .AXI_WIDTH_USER(1),             // Master ID
+    .AXI_WIDTH_ID(4),               // ID width in bits
+    .AXI_WIDTH_AD(AXI_WIDTH_AD),    // address width
+    .AXI_WIDTH_DA(AXI_WIDTH_DA),    // data width
+    .AXI_WIDTH_DS(AXI_WIDTH_DS)     // data strobe width
     )
 u_dma_read(
     //AXI Master Interface
@@ -1069,13 +1069,13 @@ u_dma_read(
 
 // DMA write module
 axi_dma_wr #(
-        .BITS_TRANS(BIT_TRANS),
-        .OUT_BITS_TRANS(BIT_TRANS),    
-        .AXI_WIDTH_USER(1),           // Master ID
-        .AXI_WIDTH_ID(4),             // ID width in bits
-        .AXI_WIDTH_AD(AXI_WIDTH_AD),  // address width
-        .AXI_WIDTH_DA(AXI_WIDTH_DA),  // data width
-        .AXI_WIDTH_DS(AXI_WIDTH_DS)   // data strobe width
+    .BITS_TRANS(BIT_TRANS),
+    .OUT_BITS_TRANS(BIT_TRANS),    
+    .AXI_WIDTH_USER(1),           // Master ID
+    .AXI_WIDTH_ID(4),             // ID width in bits
+    .AXI_WIDTH_AD(AXI_WIDTH_AD),  // address width
+    .AXI_WIDTH_DA(AXI_WIDTH_DA),  // data width
+    .AXI_WIDTH_DS(AXI_WIDTH_DS)   // data strobe width
     )
 u_dma_write(
     .M_AWID		 (M_AWID	),  // Address ID
