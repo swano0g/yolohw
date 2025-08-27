@@ -50,8 +50,13 @@ module buffer_manager #(
     input  wire                         q_load_ifm,     // ifm load start
     input  wire                         q_load_filter,  // filter load start
 
-
     input  wire                         q_fm_buf_switch,  // ofm <-> ifm switch <=> q_layer_done
+    
+
+    // Buffer Manager: ifm tap read
+    input  wire                         tap_ifm_read_vld,   // *if activated, the function as another ifm buffer is interrupted.
+    input  wire [IFM_AW-1:0]            tap_ifm_read_addr,
+    output wire [IFM_DW-1:0]            tap_ifm_read_data,
 
 
     // Buffer Manager <-> AXI
@@ -551,7 +556,7 @@ end
 wire [ROW_AW-1:0] row_buf0_read_addr, row_buf1_read_addr, row_buf2_read_addr;
 wire [ROW_AW-1:0] row_buf0_write_addr, row_buf1_write_addr, row_buf2_write_addr;
 
-wire row0_wea, row1_wea, row2_wea;
+wire              row0_wea, row1_wea, row2_wea;
 wire [IFM_DW-1:0] row0_dout, row1_dout, row2_dout; 
 
 // prefill only row buf 0
@@ -603,8 +608,6 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
-assign ifm_buf_read_addr  = pf_run ? pf_ifm_addr : reg_ifm_addr;
-assign ifm_buf_read_en    = pf_run | (control_pipe[BM_DELAY-2][CTRL_DATA_RUN] & ~control_pipe[BM_DELAY-2][IS_LAST_ROW]);
 
 assign row_buf0_read_addr = reg_row_addr;
 assign row_buf1_read_addr = reg_row_addr;
@@ -691,6 +694,11 @@ u_row_buf2(
 );
 //----------------------------------------------------------------------------
 //============================================================================
+
+// ifm access logic
+assign ifm_buf_read_addr  = tap_ifm_read_vld ? tap_ifm_read_addr : (pf_run ? pf_ifm_addr : reg_ifm_addr);
+assign ifm_buf_read_en    = tap_ifm_read_vld ? 1'b1              : (pf_run | (control_pipe[BM_DELAY-2][CTRL_DATA_RUN] & ~control_pipe[BM_DELAY-2][IS_LAST_ROW]));
+assign tap_ifm_read_data  = ifm_buf_read_data;
 
 
 assign o_bm_csync_done = c_ctrl_csync_run & fb_req_possible & pf_done;

@@ -1133,6 +1133,11 @@ u_dma_write(
 //--------------------------------------------------------------------
 // 연결선
 
+// BM read tap
+wire                        tap_ifm_read_vld;
+wire [IFM_AW-1:0]           tap_ifm_read_addr;
+wire [IFM_DW-1:0]           tap_ifm_read_data;
+
 // BM <-> PE (IFM/FILTER)
 wire [IFM_DW-1:0]           ifm_data_0, ifm_data_1, ifm_data_2;
 wire                        fb_req;
@@ -1255,6 +1260,11 @@ buffer_manager u_buffer_manager (
     .q_load_filter      (q_load_filter      ),
 
     .q_fm_buf_switch    (q_fm_buf_switch    ),
+
+    // Buffer Manager ifm tap read
+    .tap_ifm_read_vld   (tap_ifm_read_vld   ),   // *if activated, the function as another ifm buffer is interrupted.
+    .tap_ifm_read_addr  (tap_ifm_read_addr  ),
+    .tap_ifm_read_data  (tap_ifm_read_data  ),
 
     // Buffer Manager <-> AXI (IFM/FILTER)
     .read_data          (axi_read_data      ),
