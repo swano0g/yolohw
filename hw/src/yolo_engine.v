@@ -120,8 +120,8 @@ localparam BIT_TRANS = 18;
 //================================================================
 // 1) Parse control signals
 //================================================================
-reg  debug_monolayer;
-reg  debug_multlayer;
+reg         debug_on;
+
 
 //CSR
 reg ap_start;
@@ -139,12 +139,12 @@ reg [AXI_WIDTH_AD-1:0] dram_base_addr_ifm;
 reg [AXI_WIDTH_AD-1:0] dram_base_addr_filter;
 reg [AXI_WIDTH_AD-1:0] dram_base_addr_bias;
 reg [AXI_WIDTH_AD-1:0] dram_base_addr_scale;
-reg [AXI_WIDTH_AD-1:0] dram_base_addr_ofm;
+
+reg [AXI_WIDTH_AD-1:0] dram_base_addr_ofm;      // write address
 
 
 
 always @ (*) begin
-    // ap_done     = ctrl_write_done;
     ap_ready    = 1;
 end
 assign network_done     = interrupt;
@@ -154,6 +154,7 @@ assign network_done_led = interrupt;
 always @ (posedge clk or negedge rstn) begin
     if(~rstn) begin
         ap_start <= 0;
+        ap_done  <= 0;
     end
     else begin 
         if(!ap_start && i_ctrl_reg0[0])
@@ -178,8 +179,7 @@ end
 // Parse the control registers
 always @ (posedge clk or negedge rstn) begin
     if(~rstn) begin
-        debug_monolayer   <= 0;
-        debug_multlayer   <= 0;
+        debug_on          <= 0;
         dram_base_addr_rd <= 0;
         dram_base_addr_wr <= 0;
         reserved_register <= 0; // unused 
@@ -191,7 +191,7 @@ always @ (posedge clk or negedge rstn) begin
         dram_base_addr_ofm    <= 0;
     end
     else begin 
-        if(!ap_start && i_ctrl_reg0[0]) begin 
+        if (!ap_start && i_ctrl_reg0[0]) begin 
             dram_base_addr_rd <= i_ctrl_reg1; // Base Address for READ  (Input image, Model parameters)
             dram_base_addr_wr <= i_ctrl_reg2; // Base Address for WRITE (Intermediate feature maps, Outputs)
             reserved_register <= i_ctrl_reg3; // reserved (weight)
@@ -209,8 +209,7 @@ always @ (posedge clk or negedge rstn) begin
             dma_scale_rd_base_addr  <= i_ctrl_reg1 + DRAM_SCALE_OFFSET;
 
 
-            debug_monolayer <= i_ctrl_reg0[1];
-            debug_multlayer <= i_ctrl_reg0[2];
+            debug_on        <= i_ctrl_reg0[1];
 
         end 
         else if (ap_done) begin 
@@ -224,8 +223,7 @@ always @ (posedge clk or negedge rstn) begin
             dram_base_addr_scale  <= 0;
             dram_base_addr_ofm    <= 0;
 
-            debug_monolayer   <= 0;
-            debug_multlayer   <= 0;
+            debug_on   <= 0;
         end 
     end 
 end
@@ -245,6 +243,20 @@ function [15:0] blk16;
     begin blk16 = (words + 16 - 1)/16; end
 endfunction
 
+
+function [0:0] fit_1bit;
+    input [31:0] x;
+    begin
+        fit_1bit = x[0];
+    end
+endfunction
+
+function [1:0] fit_2bit;
+    input [31:0] x;
+    begin
+        fit_2bit = x[1:0];
+    end
+endfunction
 
 function [W_SIZE-1:0] fit_wsize;
     input [63:0] x;
@@ -269,18 +281,20 @@ function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
 endfunction
 
 
-// {q_upsample, q_maxpool, q_maxpool_stride, q_row_stride, q_frame_size, q_channel_out, q_channel, q_height, q_width}
+// {q_last_layer, q_ofm_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
 
-localparam W_ENTRY = 1                  // q_upsample
+localparam W_ENTRY = 1                  // q_last_layer
+                   + 1                  // q_ofm_save
+                   + 1                  // q_upsample
                    + 1                  // q_maxpool
-                   + 2                  // q_maxpool_stride
-                   + W_SIZE + W_CHANNEL // q_row_stride
-                   + W_FRAME_SIZE       // q_frame_size
+                   + 2                  // q_maxpool_stride 
                    + W_CHANNEL          // q_channel_out
                    + W_CHANNEL          // q_channel
                    + W_SIZE             // q_height
                    + W_SIZE;            // q_width
 
+
+// 미완 수정필요
 function [W_ENTRY-1:0] layer_entry;
     input [4:0] q_layer;
     begin
@@ -384,43 +398,75 @@ function [W_ENTRY-1:0] layer_entry;
                 fit_wsize(8),           // height
                 fit_wsize(8)            // width
                 };
-
-        // debug multi layer
-        5'd20: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                   // maxpool_stride
-                fit_row_stride(64),     // row_stride
-                fit_wframe(1024),       // frame_size
-                fit_wch(8),             // channel_out
-                fit_wch(4),             // channel (in)
-                fit_wsize(16),          // height
-                fit_wsize(16)           // width
-                };
-        5'd21: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd1,                   // maxpool_stride
-                fit_row_stride(64),     // row_stride
-                fit_wframe(512),        // frame_size
-                fit_wch(16),            // channel_out
-                fit_wch(8),             // channel (in)
-                fit_wsize(8),           // height
-                fit_wsize(8)            // width
-                };
-        // debug mono layer
-        5'd22: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                                   // maxpool_stride
-                fit_row_stride(TEST_COL*TEST_T_CHNIN),  // row_stride
-                fit_wframe(TEST_FRAME_SIZE),        // frame_size
-                fit_wch(TEST_T_CHNOUT),            // channel_out
-                fit_wch(TEST_T_CHNIN),             // channel (in)
-                fit_wsize(TEST_ROW),           // height
-                fit_wsize(TEST_COL)            // width
-                };
         default: layer_entry = {W_ENTRY{1'b0}};
+        endcase
+    end
+endfunction
+
+
+// debug
+`include "sim_multi_cfg.vh"
+function [W_ENTRY-1:0] dbg_layer_entry;
+    input [4:0] q_layer;
+    begin
+        case (q_layer)
+                // debug multi layer
+        5'd0: dbg_layer_entry = {
+                fit_1bit(`TEST_L0_LAST_LAYER),       // last_layer
+                fit_1bit(`TEST_L0_OFM_SAVE),         // ofm_save
+                fit_1bit(`TEST_L0_UPSAMPLE),         // upsample
+                fit_1bit(`TEST_L0_MAXPOOL),          // maxpool
+                fit_2bit(`TEST_L0_MAXPOOL_STRIDE),   // maxpool_stride
+                fit_wch(`TEST_L0_CHANNEL_OUT),       // channel_out
+                fit_wch(`TEST_L0_CHANNEL),           // channel (in)
+                fit_wsize(`TEST_L0_ROW),             // height
+                fit_wsize(`TEST_L0_COL)              // width
+                };
+        5'd1: dbg_layer_entry = {
+                fit_1bit(`TEST_L1_LAST_LAYER),       // last_layer
+                fit_1bit(`TEST_L1_OFM_SAVE),         // ofm_save
+                fit_1bit(`TEST_L1_UPSAMPLE),         // upsample
+                fit_1bit(`TEST_L1_MAXPOOL),          // maxpool
+                fit_2bit(`TEST_L1_MAXPOOL_STRIDE),   // maxpool_stride
+                fit_wch(`TEST_L1_CHANNEL_OUT),       // channel_out
+                fit_wch(`TEST_L1_CHANNEL),           // channel (in)
+                fit_wsize(`TEST_L1_ROW),             // height
+                fit_wsize(`TEST_L1_COL)              // width
+                };
+        5'd2: dbg_layer_entry = {
+                fit_1bit(`TEST_L2_LAST_LAYER),       // last_layer
+                fit_1bit(`TEST_L2_OFM_SAVE),         // ofm_save
+                fit_1bit(`TEST_L2_UPSAMPLE),         // upsample
+                fit_1bit(`TEST_L2_MAXPOOL),          // maxpool
+                fit_2bit(`TEST_L2_MAXPOOL_STRIDE),   // maxpool_stride
+                fit_wch(`TEST_L2_CHANNEL_OUT),       // channel_out
+                fit_wch(`TEST_L2_CHANNEL),           // channel (in)
+                fit_wsize(`TEST_L2_ROW),             // height
+                fit_wsize(`TEST_L2_COL)              // width
+                };
+        5'd3: dbg_layer_entry = {
+                fit_1bit(`TEST_L3_LAST_LAYER),       // last_layer
+                fit_1bit(`TEST_L3_OFM_SAVE),         // ofm_save
+                fit_1bit(`TEST_L3_UPSAMPLE),         // upsample
+                fit_1bit(`TEST_L3_MAXPOOL),          // maxpool
+                fit_2bit(`TEST_L3_MAXPOOL_STRIDE),   // maxpool_stride
+                fit_wch(`TEST_L3_CHANNEL_OUT),       // channel_out
+                fit_wch(`TEST_L3_CHANNEL),           // channel (in)
+                fit_wsize(`TEST_L3_ROW),             // height
+                fit_wsize(`TEST_L3_COL)              // width
+                };
+        5'd4: dbg_layer_entry = {
+                fit_1bit(`TEST_L4_LAST_LAYER),       // last_layer
+                fit_1bit(`TEST_L4_OFM_SAVE),         // ofm_save
+                fit_1bit(`TEST_L4_UPSAMPLE),         // upsample
+                fit_1bit(`TEST_L4_MAXPOOL),          // maxpool
+                fit_2bit(`TEST_L4_MAXPOOL_STRIDE),   // maxpool_stride
+                fit_wch(`TEST_L4_CHANNEL_OUT),       // channel_out
+                fit_wch(`TEST_L4_CHANNEL),           // channel (in)
+                fit_wsize(`TEST_L4_ROW),             // height
+                fit_wsize(`TEST_L4_COL)              // width
+                };
+        default: dbg_layer_entry = {W_ENTRY{1'b0}};
         endcase
     end
 endfunction
@@ -445,11 +491,15 @@ reg                         q_maxpool;
 reg  [1:0]                  q_maxpool_stride;
 reg                         q_upsample;
 
+reg                         q_last_layer;
+
 reg                         q_c_ctrl_start;  // cnn_ctrl start signal (q_start)
 reg                         q_load_ifm;
 reg                         q_load_filter;
 reg                         q_load_bias;
 reg                         q_load_scale;
+
+reg                         q_ofm_save;
 
 reg                         q_fm_buf_switch;
 
@@ -458,9 +508,9 @@ reg                         q_fm_buf_switch;
 //  - IFM 초기 적재 완료: buffer_manager(or DMA 프론트엔드)에서 발생
 //  - 한 레이어 연산 완료: cnn_ctrl에서 제공 (기존 layer_done 사용)
 //  - OFM 저장 완료: writer(또는 postprocessor→writer)에서 발생
-wire dma_ifm_load_done; // TODO: buffer_manager에 포트 추가하여 연결
-wire ofm_write_done;    // TODO: OFM writer 모듈 done 신호 연결
-wire layer_done;        // 이미 cnn_ctrl에서 나옴
+wire dma_ifm_load_done;     // 
+wire dma_ofm_write_done;
+wire layer_done;            // cnn_ctrl
 
 
 reg [2:0] q_state;
@@ -469,8 +519,9 @@ localparam
     S_IDLE          = 3'd0, 
     S_LOAD_IFM      = 3'd1, // initial once
     S_SAVE_OFM      = 3'd2, // layer 14, 20
-    S_LOAD_CFG      = 3'd3,
-    S_WAIT_CNN_CTRL = 3'd4;  // each layer
+    S_LOAD_CFG1     = 3'd3,
+    S_LOAD_CFG2     = 3'd4,
+    S_WAIT_CNN_CTRL = 3'd5;  // each layer
 
 
 
@@ -491,10 +542,14 @@ always @(posedge clk or negedge rstn) begin
         q_maxpool_stride <= 0;
         q_upsample       <= 0;
 
+        q_last_layer     <= 0;
+
         q_load_ifm       <= 0;
         q_load_filter    <= 0;
         q_load_bias      <= 0;
         q_load_scale     <= 0;
+
+        q_ofm_save       <= 0;
 
         q_fm_buf_switch  <= 0;
 
@@ -508,15 +563,9 @@ always @(posedge clk or negedge rstn) begin
         case (q_state)
             S_IDLE: begin
                 if (ap_start) begin
-                    if (debug_monolayer) begin 
-                        q_layer <= 5'd22;
-                    end else if (debug_multlayer) begin 
-                        q_layer <= 5'd20;
-                    end else begin 
-                        q_layer <= 0;
-                    end
-                    
-                    q_state     <= S_LOAD_CFG;
+                    q_layer <= 0;
+                    q_state <= S_LOAD_CFG1;
+
                 end
             end
 
@@ -529,42 +578,61 @@ always @(posedge clk or negedge rstn) begin
                 end
             end            
             
-            S_LOAD_CFG: begin
-                {q_upsample, q_maxpool, q_maxpool_stride, q_row_stride, q_frame_size, q_channel_out, q_channel, q_height, q_width} <= layer_entry(q_layer);
+            // FETCH
+            S_LOAD_CFG1: begin
 
-                if (q_layer == 5'd20 || q_layer == 5'd22) begin 
-                    // debug start layer
+                // ADD
+                // q_frame_size, q_row_stride: internal caculation
+                if (debug_on) begin 
+                    {q_last_layer, q_ofm_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
+                end else begin 
+                    {q_last_layer, q_ofm_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
+                end
+                
+                q_frame_size <= q_width * q_height * q_channel;
+                q_row_stride <= q_width * q_channel;
+
+                q_state <= S_LOAD_CFG2;
+            end
+            
+            // DECODE
+            S_LOAD_CFG2: begin
+                if (q_layer == 0) begin 
                     q_state <= S_LOAD_IFM;
-                end else if (q_layer == 5'd0) begin 
-                    q_state <= S_LOAD_IFM;
+                end else if (q_ofm_save) begin 
+                    q_state <= S_SAVE_OFM;
                 end else begin 
                     q_c_ctrl_start <= 1'b1;
                     q_state <= S_WAIT_CNN_CTRL;
                 end
-                
-                // special layer 처리
             end
 
+
             S_SAVE_OFM: begin 
-                // pass
-                // 아직 구현할 필요 없음 
+                if (dma_ofm_write_done) begin 
+                    if (q_last_layer) begin 
+                        q_state <= S_IDLE;
+                        ap_done <= 1;
+                        ap_start <= 0;
+                    end else begin 
+                        q_layer <= q_layer + 1;
+                        // q_fm_buf_switch <= 1;
+                        q_state <= S_LOAD_CFG1;     
+                    end
+                end
             end
 
 
             S_WAIT_CNN_CTRL: begin 
                 if (layer_done) begin 
-                    if (q_layer == 5'd21) begin 
-                        // bebug multilayer end
+                    if (q_last_layer) begin 
                         q_state <= S_IDLE;
                         ap_done <= 1;
-                    end else if (q_layer == 5'd22) begin 
-                        // bebug multilayer end
-                        q_state <= S_IDLE;
-                        ap_done <= 1;
+                        ap_start <= 0;
                     end else begin 
                         q_layer <= q_layer + 1;
                         q_fm_buf_switch <= 1;
-                        q_state <= S_LOAD_CFG;
+                        q_state <= S_LOAD_CFG1;
                     end
                 end
             end
@@ -980,9 +1048,112 @@ end
 // input  write_data                data to write
 // output indata_req_wr             data request signal
 
+// tap_ifm_vld
+// tap_ifm_read_vld
+// tap_ifm_read_addr
+// tap_ifm_read_data
+
+wire in_save_ofm_stage    = (q_state == S_SAVE_OFM);
 
 
-assign dma_wr_num_trans = num_trans; 
+reg in_save_ofm_d;
+
+wire in_save_ofm_enter    =  in_save_ofm_stage & ~in_save_ofm_d;
+wire in_save_ofm_leave    = ~in_save_ofm_stage &  in_save_ofm_d;
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        in_save_ofm_d    <= 1'b0;
+    end else begin
+        in_save_ofm_d    <= in_save_ofm_stage;
+    end
+end
+
+
+
+localparam 
+    DMA_SAVE_IDLE  = 2'd0,
+    DMA_SAVE_SETUP = 2'd1,
+    DMA_SAVE_KICK  = 2'd2,
+    DMA_SAVE_WAIT  = 2'd3;
+
+reg [1:0] dma_save_state;
+
+
+// total bytes / 64B
+reg [15:0]                      dma_wr_max_req_blk_idx_r;   // request
+reg [15:0]                      dma_wr_blk_idx;             // blk counter
+
+
+reg                             dma_save_wr_go_pulse;
+
+// // top fsm에 올려줄 신호
+assign dma_ofm_write_done       = dma_ctrl_write_done;
+
+
+// 
+assign dma_wr_go                = dma_save_wr_go_pulse;
+assign dma_wr_base_addr         = dram_base_addr_ofm;
+assign dma_wr_max_req_blk_idx   = dma_wr_max_req_blk_idx_r;
+assign dma_wr_num_trans         = num_trans;
+
+
+// 전체 바이트 
+// item   : formula                         = formula optimize      => # blocks optimized
+//-------------------------------------------------------------------------------------------
+// ofm    : eff_w * eff_h * q_channel       = q_frame_size << 2     => q_frame_size >> 4        
+
+
+assign tap_ifm_vld          = in_save_ofm_stage;
+assign tap_ifm_read_vld     = indata_req_wr;
+assign tap_ifm_read_addr    = (dma_wr_blk_idx << 4) + write_data_cnt;
+assign write_data           = tap_ifm_read_data;
+
+
+// -----------------------------------------------------------------------------
+
+
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        dma_save_state <= DMA_SAVE_IDLE;
+
+        dma_wr_max_req_blk_idx_r <= 0;
+        dma_wr_blk_idx           <= 0;
+        dma_save_wr_go_pulse     <= 0;
+    end else begin
+        dma_save_wr_go_pulse <= 0;
+        case (dma_save_state)
+            DMA_SAVE_IDLE: begin
+                if (in_save_ofm_enter) begin 
+                    dma_save_state <= DMA_SAVE_SETUP;
+                end
+            end
+
+            DMA_SAVE_SETUP: begin
+                dma_wr_max_req_blk_idx_r <= ceil_div64(q_frame_size<<2);
+                dma_save_state <= DMA_SAVE_KICK;
+            end
+
+            DMA_SAVE_KICK: begin
+                dma_save_wr_go_pulse <= 1;
+                dma_save_state <= DMA_SAVE_WAIT;
+            end
+
+            DMA_SAVE_WAIT: begin
+                if (write_done) begin 
+                    dma_wr_blk_idx <= dma_wr_blk_idx + 1;
+                end
+                if (dma_ctrl_write_done) begin 
+                    dma_save_state <= DMA_SAVE_IDLE;
+                    
+                    dma_wr_max_req_blk_idx_r <= 0;
+                    dma_wr_blk_idx           <= 0;
+                end
+            end
+        endcase
+    end
+end
+
 
 
 
@@ -1134,6 +1305,7 @@ u_dma_write(
 // 연결선
 
 // BM read tap
+wire                        tap_ifm_vld;
 wire                        tap_ifm_read_vld;
 wire [IFM_AW-1:0]           tap_ifm_read_addr;
 wire [IFM_DW-1:0]           tap_ifm_read_data;
@@ -1262,7 +1434,8 @@ buffer_manager u_buffer_manager (
     .q_fm_buf_switch    (q_fm_buf_switch    ),
 
     // Buffer Manager ifm tap read
-    .tap_ifm_read_vld   (tap_ifm_read_vld   ),   // *if activated, the function as another ifm buffer is interrupted.
+    .tap_ifm_vld        (tap_ifm_vld        ),   // *if activated, the function as another ifm buffer is interrupted.
+    .tap_ifm_read_vld   (tap_ifm_read_vld   ),
     .tap_ifm_read_addr  (tap_ifm_read_addr  ),
     .tap_ifm_read_data  (tap_ifm_read_data  ),
 
