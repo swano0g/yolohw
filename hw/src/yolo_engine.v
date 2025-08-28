@@ -270,28 +270,38 @@ function [W_CHANNEL-1:0] fit_wch;
     begin fit_wch = x[W_CHANNEL-1:0]; end
 endfunction
 
-function [W_FRAME_SIZE-1:0] fit_wframe;
+function [IFM_AW-1:0] fit_aw;
     input [63:0] x; 
-    begin fit_wframe = x[W_FRAME_SIZE-1:0]; end
+    begin fit_wch = x[IFM_AW-1:0]; end
 endfunction
 
-function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
-    input [63:0] x;
-    begin fit_row_stride = x[W_SIZE+W_CHANNEL-1:0]; end
-endfunction
+// function [W_FRAME_SIZE-1:0] fit_wframe;
+//     input [63:0] x; 
+//     begin fit_wframe = x[W_FRAME_SIZE-1:0]; end
+// endfunction
+
+// function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
+//     input [63:0] x;
+//     begin fit_row_stride = x[W_SIZE+W_CHANNEL-1:0]; end
+// endfunction
 
 
-// {q_last_layer, q_ofm_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
+// {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
 
+// 40 + 19
 localparam W_ENTRY = 1                  // q_last_layer
                    + 1                  // q_ofm_save
+                   + IFM_AW             // q_route_offset
+                   + 2                  // q_route_loc
+                   + 1                  // q_route_load
+                   + 1                  // q_route_save
                    + 1                  // q_upsample
                    + 1                  // q_maxpool
                    + 2                  // q_maxpool_stride 
-                   + W_CHANNEL          // q_channel_out
-                   + W_CHANNEL          // q_channel
-                   + W_SIZE             // q_height
-                   + W_SIZE;            // q_width
+                   + W_CHANNEL          // q_channel_out    8
+                   + W_CHANNEL          // q_channel        8
+                   + W_SIZE             // q_height         9
+                   + W_SIZE;            // q_width          9
 
 
 // 미완 수정필요
@@ -412,59 +422,74 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         case (q_layer)
                 // debug multi layer
         5'd0: dbg_layer_entry = {
-                fit_1bit(`TEST_L0_LAST_LAYER),       // last_layer
-                fit_1bit(`TEST_L0_OFM_SAVE),         // ofm_save
-                fit_1bit(`TEST_L0_UPSAMPLE),         // upsample
-                fit_1bit(`TEST_L0_MAXPOOL),          // maxpool
-                fit_2bit(`TEST_L0_MAXPOOL_STRIDE),   // maxpool_stride
-                fit_wch(`TEST_L0_CHANNEL_OUT),       // channel_out
-                fit_wch(`TEST_L0_CHANNEL),           // channel (in)
-                fit_wsize(`TEST_L0_ROW),             // height
-                fit_wsize(`TEST_L0_COL)              // width
+                fit_1bit(`TEST_L0_LAST_LAYER),      // last_layer
+                fit_1bit(`TEST_L0_OFM_SAVE),        // ofm_save
+                fit_aw(`TEST_L0_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`TEST_L0_ROUTE_LOC),       // route_loc
+                fit_1bit(`TEST_L0_ROUTE),           // route
+                fit_1bit(`TEST_L0_UPSAMPLE),        // upsample
+                fit_1bit(`TEST_L0_MAXPOOL),         // maxpool
+                fit_2bit(`TEST_L0_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`TEST_L0_CHANNEL_OUT),      // channel_out
+                fit_wch(`TEST_L0_CHANNEL),          // channel (in)
+                fit_wsize(`TEST_L0_ROW),            // height
+                fit_wsize(`TEST_L0_COL)             // width
                 };
         5'd1: dbg_layer_entry = {
-                fit_1bit(`TEST_L1_LAST_LAYER),       // last_layer
-                fit_1bit(`TEST_L1_OFM_SAVE),         // ofm_save
-                fit_1bit(`TEST_L1_UPSAMPLE),         // upsample
-                fit_1bit(`TEST_L1_MAXPOOL),          // maxpool
-                fit_2bit(`TEST_L1_MAXPOOL_STRIDE),   // maxpool_stride
-                fit_wch(`TEST_L1_CHANNEL_OUT),       // channel_out
-                fit_wch(`TEST_L1_CHANNEL),           // channel (in)
-                fit_wsize(`TEST_L1_ROW),             // height
-                fit_wsize(`TEST_L1_COL)              // width
+                fit_1bit(`TEST_L1_LAST_LAYER),      // last_layer
+                fit_1bit(`TEST_L1_OFM_SAVE),        // ofm_save
+                fit_aw(`TEST_L1_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`TEST_L1_ROUTE_LOC),       // route_loc
+                fit_1bit(`TEST_L1_ROUTE),           // route
+                fit_1bit(`TEST_L1_UPSAMPLE),        // upsample
+                fit_1bit(`TEST_L1_MAXPOOL),         // maxpool
+                fit_2bit(`TEST_L1_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`TEST_L1_CHANNEL_OUT),      // channel_out
+                fit_wch(`TEST_L1_CHANNEL),          // channel (in)
+                fit_wsize(`TEST_L1_ROW),            // height
+                fit_wsize(`TEST_L1_COL)             // width
                 };
         5'd2: dbg_layer_entry = {
-                fit_1bit(`TEST_L2_LAST_LAYER),       // last_layer
-                fit_1bit(`TEST_L2_OFM_SAVE),         // ofm_save
-                fit_1bit(`TEST_L2_UPSAMPLE),         // upsample
-                fit_1bit(`TEST_L2_MAXPOOL),          // maxpool
-                fit_2bit(`TEST_L2_MAXPOOL_STRIDE),   // maxpool_stride
-                fit_wch(`TEST_L2_CHANNEL_OUT),       // channel_out
-                fit_wch(`TEST_L2_CHANNEL),           // channel (in)
-                fit_wsize(`TEST_L2_ROW),             // height
-                fit_wsize(`TEST_L2_COL)              // width
+                fit_1bit(`TEST_L2_LAST_LAYER),      // last_layer
+                fit_1bit(`TEST_L2_OFM_SAVE),        // ofm_save
+                fit_aw(`TEST_L2_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`TEST_L2_ROUTE_LOC),       // route_loc
+                fit_1bit(`TEST_L2_ROUTE),           // route
+                fit_1bit(`TEST_L2_UPSAMPLE),        // upsample
+                fit_1bit(`TEST_L2_MAXPOOL),         // maxpool
+                fit_2bit(`TEST_L2_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`TEST_L2_CHANNEL_OUT),      // channel_out
+                fit_wch(`TEST_L2_CHANNEL),          // channel (in)
+                fit_wsize(`TEST_L2_ROW),            // height
+                fit_wsize(`TEST_L2_COL)             // width
                 };
         5'd3: dbg_layer_entry = {
-                fit_1bit(`TEST_L3_LAST_LAYER),       // last_layer
-                fit_1bit(`TEST_L3_OFM_SAVE),         // ofm_save
-                fit_1bit(`TEST_L3_UPSAMPLE),         // upsample
-                fit_1bit(`TEST_L3_MAXPOOL),          // maxpool
-                fit_2bit(`TEST_L3_MAXPOOL_STRIDE),   // maxpool_stride
-                fit_wch(`TEST_L3_CHANNEL_OUT),       // channel_out
-                fit_wch(`TEST_L3_CHANNEL),           // channel (in)
-                fit_wsize(`TEST_L3_ROW),             // height
-                fit_wsize(`TEST_L3_COL)              // width
+                fit_1bit(`TEST_L3_LAST_LAYER),      // last_layer
+                fit_1bit(`TEST_L3_OFM_SAVE),        // ofm_save
+                fit_aw(`TEST_L3_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`TEST_L3_ROUTE_LOC),       // route_loc
+                fit_1bit(`TEST_L3_ROUTE),           // route
+                fit_1bit(`TEST_L3_UPSAMPLE),        // upsample
+                fit_1bit(`TEST_L3_MAXPOOL),         // maxpool
+                fit_2bit(`TEST_L3_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`TEST_L3_CHANNEL_OUT),      // channel_out
+                fit_wch(`TEST_L3_CHANNEL),          // channel (in)
+                fit_wsize(`TEST_L3_ROW),            // height
+                fit_wsize(`TEST_L3_COL)             // width
                 };
         5'd4: dbg_layer_entry = {
-                fit_1bit(`TEST_L4_LAST_LAYER),       // last_layer
-                fit_1bit(`TEST_L4_OFM_SAVE),         // ofm_save
-                fit_1bit(`TEST_L4_UPSAMPLE),         // upsample
-                fit_1bit(`TEST_L4_MAXPOOL),          // maxpool
-                fit_2bit(`TEST_L4_MAXPOOL_STRIDE),   // maxpool_stride
-                fit_wch(`TEST_L4_CHANNEL_OUT),       // channel_out
-                fit_wch(`TEST_L4_CHANNEL),           // channel (in)
-                fit_wsize(`TEST_L4_ROW),             // height
-                fit_wsize(`TEST_L4_COL)              // width
+                fit_1bit(`TEST_L4_LAST_LAYER),      // last_layer
+                fit_1bit(`TEST_L4_OFM_SAVE),        // ofm_save
+                fit_aw(`TEST_L4_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`TEST_L4_ROUTE_LOC),       // route_loc
+                fit_1bit(`TEST_L4_ROUTE),           // route
+                fit_1bit(`TEST_L4_UPSAMPLE),        // upsample
+                fit_1bit(`TEST_L4_MAXPOOL),         // maxpool
+                fit_2bit(`TEST_L4_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`TEST_L4_CHANNEL_OUT),      // channel_out
+                fit_wch(`TEST_L4_CHANNEL),          // channel (in)
+                fit_wsize(`TEST_L4_ROW),            // height
+                fit_wsize(`TEST_L4_COL)             // width
                 };
         default: dbg_layer_entry = {W_ENTRY{1'b0}};
         endcase
@@ -478,7 +503,7 @@ endfunction
 //================================================================
 // 3) TOP state machine
 //================================================================
-reg [4:0]                   q_layer;        // layer index
+reg  [4:0]                  q_layer;        // layer index
 
 // layer informations -> hard coding
 reg  [W_SIZE-1:0]           q_width;
@@ -498,6 +523,11 @@ reg                         q_load_ifm;
 reg                         q_load_filter;
 reg                         q_load_bias;
 reg                         q_load_scale;
+
+reg                         q_route_save;
+reg                         q_route_load;
+reg  [1:0]                  q_route_loc;    // 0-> ifm(feed back), 1-> additional buf, 2-> dram
+reg  [IFM_AW-1:0]           q_route_offset; // address offset
 
 reg                         q_ofm_save;
 
@@ -542,6 +572,11 @@ always @(posedge clk or negedge rstn) begin
         q_maxpool_stride <= 0;
         q_upsample       <= 0;
 
+        q_route_save     <= 0;
+        q_route_load     <= 0;
+        q_route_loc      <= 0;
+        q_route_offset   <= 0;
+
         q_last_layer     <= 0;
 
         q_load_ifm       <= 0;
@@ -584,9 +619,9 @@ always @(posedge clk or negedge rstn) begin
                 // ADD
                 // q_frame_size, q_row_stride: internal caculation
                 if (debug_on) begin 
-                    {q_last_layer, q_ofm_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
+                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
                 end else begin 
-                    {q_last_layer, q_ofm_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
+                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
                 end
                 
                 q_frame_size <= q_width * q_height * q_channel;
@@ -1310,6 +1345,19 @@ wire                        tap_ifm_read_vld;
 wire [IFM_AW-1:0]           tap_ifm_read_addr;
 wire [IFM_DW-1:0]           tap_ifm_read_data;
 
+// BM route aux port
+wire                        rte_ifm_vld;
+wire                        rte_ifm_write_vld;
+wire [IFM_AW-1:0]           rte_ifm_write_addr;
+wire [IFM_DW-1:0]           rte_ifm_write_data;
+
+
+// rte ports (when route load)  FIXME
+wire                        rte_buf_load_vld;
+wire [RTE_AW-1:0]           rte_buf_load_addr;
+wire [FM_DW-1:0]            rte_buf_load_data;
+wire                        rte_buf_load_done; 
+
 // BM <-> PE (IFM/FILTER)
 wire [IFM_DW-1:0]           ifm_data_0, ifm_data_1, ifm_data_2;
 wire                        fb_req;
@@ -1375,7 +1423,6 @@ wire                        mux_ofm_data_vld = q_maxpool ? mp_data_vld : pp_data
 wire  [OFM_DW-1:0]          mux_ofm_data     = q_maxpool ? mp_data     : pp_data;
 wire  [OFM_AW-1:0]          mux_ofm_addr     = q_maxpool ? mp_addr     : pp_addr;
 
-
 //---------------------------------------------------------------------- 
 cnn_ctrl u_cnn_ctrl (
     .clk               (clk                 ),
@@ -1438,6 +1485,15 @@ buffer_manager u_buffer_manager (
     .tap_ifm_read_vld   (tap_ifm_read_vld   ),
     .tap_ifm_read_addr  (tap_ifm_read_addr  ),
     .tap_ifm_read_data  (tap_ifm_read_data  ),
+
+    // aux port for route load (route buffer -> ifm buffer)
+    // two functionality
+    // 1. when route save -> pp result directly saved in buf destination
+    // 2. when route load -> route buf data (FIXME: need to implement)
+    .rte_ifm_vld        (rte_ifm_vld        ),   // must be separated from the area being calculated
+    .rte_ifm_write_vld  (rte_ifm_write_vld  ),
+    .rte_ifm_write_addr (rte_ifm_write_addr ),
+    .rte_ifm_write_data (rte_ifm_write_data ),
 
     // Buffer Manager <-> AXI (IFM/FILTER)
     .read_data          (axi_read_data      ),
@@ -1594,5 +1650,33 @@ maxpool u_maxpool (
     .o_mp_addr          (mp_addr            )
 );
 
+
+route_buffer u_route_buffer (
+    .clk                (clk                ),
+    .rstn               (rstn               ),
+
+    // top
+    .q_route_save       (q_route_save       ),
+    .q_route_load       (q_route_load       ),
+    .q_route_loc        (q_route_loc        ),
+    .q_route_offset     (q_route_offset     ),
+
+    // postprocessor
+    .pp_data_vld        (pp_data_vld        ),
+    .pp_data            (pp_data            ),
+    .pp_addr            (pp_addr            ),
+
+    // buffer manager
+    .rte_ifm_vld        (rte_ifm_vld        ),
+    .rte_ifm_write_vld  (rte_ifm_write_vld  ),
+    .rte_ifm_write_addr (rte_ifm_write_addr ),
+    .rte_ifm_write_data (rte_ifm_write_data ),
+
+    // route load
+    .rte_buf_load_vld   (rte_buf_load_vld   ),  // input
+    .rte_buf_load_addr  (rte_buf_load_addr  ),  // output
+    .rte_buf_load_data  (rte_buf_load_data  ),  // output
+    .rte_buf_load_done  (rte_buf_load_done  )   // output
+);
 
 endmodule
