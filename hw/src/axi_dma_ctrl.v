@@ -34,7 +34,7 @@ input                       i_write_done,
 input                       i_indata_req_wr,
 output                      o_ctrl_write,
 output [AXI_WIDTH_AD-1:0]   o_write_addr,
-output [BIT_TRANS-1:0]      o_write_data_cnt,
+output [BIT_TRANS-1:0]      o_write_data_cnt
 );
 //----------------------------------------------------------------
 // Internal Signals
@@ -89,6 +89,19 @@ assign o_blk_read           = req_blk_idx_rd;
 //----------------------------------------------------------------
 // FSM for DMA Read
 //----------------------------------------------------------------
+/* gap counter */
+localparam RD_RESTART_DELAY=3;
+reg [$clog2(RD_RESTART_DELAY):0] rd_gap_cnt;
+
+always @(posedge clk or negedge rstn) begin
+    if(!rstn) rd_gap_cnt<=0;
+    else if(cstate_rd==ST_DMA_WAIT&&read_done&&(req_blk_idx_rd!=max_req_blk_idx-1)) rd_gap_cnt<=0;
+    else if(cstate_rd==ST_DMA_SYNC) rd_gap_cnt<=rd_gap_cnt+1;
+    else rd_gap_cnt<=0;
+end
+
+
+
 always @(posedge clk or negedge rstn) begin
     if(~rstn) begin
         cstate_rd <= ST_IDLE;
@@ -137,17 +150,7 @@ always @(*) begin
         end 
     endcase 
 end 
-/* gap counter */
-localparam RD_RESTART_DELAY=3;
 
-reg [$clog2(RD_RESTART_DELAY):0] rd_gap_cnt;
-
-always @(posedge clk or negedge rstn) begin
-    if(!rstn) rd_gap_cnt<=0;
-    else if(cstate_rd==ST_DMA_WAIT&&read_done&&(req_blk_idx_rd!=max_req_blk_idx-1)) rd_gap_cnt<=0;
-    else if(cstate_rd==ST_DMA_SYNC) rd_gap_cnt<=rd_gap_cnt+1;
-    else rd_gap_cnt<=0;
-end
 
 always @(posedge clk or negedge rstn) begin
     if(~rstn) begin
@@ -238,7 +241,7 @@ always @(posedge clk or negedge rstn) begin
     end
     else begin
         if (write_done) begin 
-           if(req_blk_idx_wr == max_req_blk_idx - 1)
+            if (req_blk_idx_wr == wr_max_blk - 1)
                 req_blk_idx_wr <= 0;                // Reset the counter
             else 
                 req_blk_idx_wr <= req_blk_idx_wr + 1;   // Up-Counter    
@@ -263,6 +266,6 @@ always @(posedge clk or negedge rstn) begin
     end
 end
 
-assign write_addr = dram_base_addr_wr + {req_blk_idx_wr,6'b0} /*+ {write_data_cnt,2'b0};*/ 
+assign write_addr = dram_base_addr_wr + {req_blk_idx_wr,6'b0}; /*+ {write_data_cnt,2'b0};*/ 
 
 endmodule

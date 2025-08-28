@@ -11,14 +11,14 @@
 
 module axi_dma_wr #(
 	// Parameters
-	parameter BITS_TRANS     = 18;
-	parameter OUT_BITS_TRANS = 13;
+	parameter BITS_TRANS     = 18,
+	parameter OUT_BITS_TRANS = 13,
 
-	parameter AXI_WIDTH_USER = 1;                // Master ID
-	parameter AXI_WIDTH_ID   = 4;                // ID width in bits
-	parameter AXI_WIDTH_AD   = 32;               // address width
-	parameter AXI_WIDTH_DA   = 32;               // data width
-	parameter AXI_WIDTH_DS   = (AXI_WIDTH_DA/8); // data strobe width
+	parameter AXI_WIDTH_USER = 1,                // Master ID
+	parameter AXI_WIDTH_ID   = 4,                // ID width in bits
+	parameter AXI_WIDTH_AD   = 32,               // address width
+	parameter AXI_WIDTH_DA   = 32,               // data width
+	parameter AXI_WIDTH_DS   = (AXI_WIDTH_DA/8)  // data strobe width
 )(
    //AXI Master Interface
    //Write address channel
