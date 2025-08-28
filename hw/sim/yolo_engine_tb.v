@@ -6,11 +6,12 @@ module yolo_engine_tb;
 // select test case
 // `define TESTCASE_0 1
 // `define TESTCASE_1 1
-// `define TESTCASE_2 1
+ `define TESTCASE_2 1
 
 
 // `include "define.v"
 `include "sim_cfg.vh"
+`include "sim_multi_cfg.vh"
 
 localparam MEM_ADDRW = 22;
 localparam MEM_DW = 16;
@@ -29,6 +30,7 @@ localparam DRAM_IFM_OFFSET    = 0;
 localparam DRAM_FILTER_OFFSET = 4096;
 localparam DRAM_BIAS_OFFSET   = 27136;
 localparam DRAM_SCALE_OFFSET  = 27520;
+localparam DRAM_OFM_OFFSET    = 32768;
 
 // Clock
 parameter CLK_PERIOD = 10;   //100MHz
@@ -148,7 +150,7 @@ u_axi_ext_mem_if_input(
 // Inputs
 //instruction memory
 sram #(
-   .FILE_NAME("C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/dram/multilayer_test_memory_16b.hex"),
+   .FILE_NAME(`TEST_MULTI_MEMORY_16),
    .SIZE(2**MEM_ADDRW),
    .WL_ADDR(MEM_ADDRW),
    .WL_DATA(MEM_DW  ))
@@ -222,7 +224,7 @@ u_yolo_engine
     // WRITE
     .M_AWVALID	(M_AWVALID),
     .M_AWREADY	(M_AWREADY),
-    .M_AWADDR	(M_AWADDR ),
+    .M_AWADDR	(M_AWADDR ),    // write address
     .M_AWID		(M_AWID	  ),
     .M_AWLEN	(M_AWLEN  ),
     .M_AWSIZE	(M_AWSIZE ),
@@ -234,9 +236,9 @@ u_yolo_engine
     .M_AWREGION (		  ),
     .M_AWUSER	(		  ),
     
-    .M_WVALID	(M_WVALID ),
-    .M_WREADY	(M_WREADY ),
-    .M_WDATA	(M_WDATA  ),
+    .M_WVALID	(M_WVALID ),    // write data valid
+    .M_WREADY	(M_WREADY ),    
+    .M_WDATA	(M_WDATA  ),    // write data
     .M_WSTRB	(M_WSTRB  ),
     .M_WLAST	(M_WLAST  ),
     .M_WID		(M_WID	  ),
@@ -265,8 +267,10 @@ initial begin
    #(4*CLK_PERIOD) rstn = 1'b1; 
    #(100*CLK_PERIOD) 
         @(posedge clk)
-            // i_0 = 32'd3; // ... _0011  debug_monolayer
-            i_0 = 32'd5; // ... _0101  debug_multlayer
+            i_0 = 32'd3; // ... _0011  debug_monolayer
+            // i_0 = 32'd5;            // ... _0101  debug_multlayer
+            i_1 = 32'd0;            // read addr
+            i_2 = DRAM_OFM_OFFSET;  // write addr
 
    #(100*CLK_PERIOD) 
          @(posedge clk)
@@ -274,224 +278,42 @@ initial begin
 end
 
 
+
+
 //--------------------------------------------------------------------
 // Compare output
 //--------------------------------------------------------------------
 `include "controller_params.vh"
-reg  [`PSUM_DW-1:0]          expect_conv [0:65536-1];
-reg  [`OFM_DW-1:0]           expect_aff  [0:65536-1];
-reg  [`OFM_DW-1:0]           expect_mp1  [0:65536-1];
-reg  [`OFM_DW-1:0]           expect_mp2  [0:65536-1];
-reg  [`OFM_DW-1:0]           expect_ml   [0:65536-1];
-        
 
-initial begin 
-    // $readmemh(`TEST_EXP_CONV_PATH, expect_conv);
-    // $readmemh(`TEST_EXP_AFFINE_PATH, expect_aff);
-    // $readmemh(`TEST_EXP_MAXPOOL_STRIDE1_PATH, expect_mp1);
-    // $readmemh(`TEST_EXP_MAXPOOL_STRIDE2_PATH, expect_mp2);
-    $readmemh("C:/Users/rain0/hw_prj/AIX_source/hw/inout_data/expect/multilayer_test_output_32b.hex", expect_ml);
+// `define MONOLAYER 1
+`define MULTILAYER 1
+
+
+reg  [`OFM_DW-1:0]           result   [0:65536-1];
+reg  [`OFM_DW-1:0]           expect   [0:65536-1];
+
+initial begin
+    `ifdef MONOLAYER
+        $readmemh(`TEST_EXP_MAXPOOL_STRIDE2_PATH, expect);
+    `else
+        $readmemh(`TEST_MULTI_EXPECT, expect);
+    `endif
 end
 
 
 // ------- capture signals -------
-reg [`PSUM_DW-1:0] cap_pe_mem [0:65536-1];
-reg [`OFM_DW-1:0]  cap_pp_mem [0:65536-1];
-reg [`OFM_DW-1:0]  cap_mp_mem [0:65536-1];
+integer cap_addr;
 
-// wire [`PSUM_DW-1:0]  cap_pe_data0 = u_yolo_engine.pe_data[0*`PSUM_DW+:`PSUM_DW];
-// wire [`PSUM_DW-1:0]  cap_pe_data1 = u_yolo_engine.pe_data[1*`PSUM_DW+:`PSUM_DW];
-// wire [`PSUM_DW-1:0]  cap_pe_data2 = u_yolo_engine.pe_data[2*`PSUM_DW+:`PSUM_DW];
-// wire [`PSUM_DW-1:0]  cap_pe_data3 = u_yolo_engine.pe_data[3*`PSUM_DW+:`PSUM_DW];
-
-
-// wire                        cap_pp_vld  = u_yolo_engine.pp_data_vld;
-// wire [`OFM_DW-1:0]          cap_pp_data = u_yolo_engine.pp_data;
-// wire [`FM_BUFFER_AW-1:0]    cap_pp_addr = u_yolo_engine.pp_addr;
-
-wire                        cap_mp_vld  = u_yolo_engine.mp_data_vld;
-wire [`OFM_DW-1:0]          cap_mp_data = u_yolo_engine.mp_data;
-wire [`FM_BUFFER_AW-1:0]    cap_mp_addr = u_yolo_engine.mp_addr;
-
-integer base_addr_cap;
-integer i;
-
-always @(posedge clk) begin
-    if (!rstn) begin
-        // base_addr_cap <= 0;
-        // for (i = 0; i < 65536; i = i + 1) begin 
-        //     cap_pe_mem[i] <= 0;
-        // end
+always @(posedge clk or negedge rstn) begin
+    if (!rstn) begin 
+        cap_addr <= 0;
     end
-    else begin 
-        // if (u_yolo_engine.pe_vld) begin 
-        //     base_addr_cap =  (u_yolo_engine.pe_row * u_yolo_engine.q_width + u_yolo_engine.pe_col) * (u_yolo_engine.q_channel_out<<2) + u_yolo_engine.pe_chn_out * `Tout;
-            
-        //     cap_pe_mem[base_addr_cap + 0] <= $signed(cap_pe_mem[base_addr_cap + 0]) + $signed(cap_pe_data0);
-        //     cap_pe_mem[base_addr_cap + 1] <= $signed(cap_pe_mem[base_addr_cap + 1]) + $signed(cap_pe_data1);
-        //     cap_pe_mem[base_addr_cap + 2] <= $signed(cap_pe_mem[base_addr_cap + 2]) + $signed(cap_pe_data2);
-        //     cap_pe_mem[base_addr_cap + 3] <= $signed(cap_pe_mem[base_addr_cap + 3]) + $signed(cap_pe_data3);
-        // end
-
-        // if (cap_pp_vld) begin
-        //     cap_pp_mem[cap_pp_addr] <= cap_pp_data;
-        // end
-
-        if (cap_mp_vld) begin 
-            cap_mp_mem[cap_mp_addr] <= cap_mp_data;
-        end
+    if (M_WVALID) begin
+        result[cap_addr] <= M_WDATA;
+        cap_addr <= cap_addr + 1;
     end
 end
 // -------------------------------
-
-task automatic tb_check_conv_result;
-    integer i;
-    integer exp_words;
-    integer errors, checks;
-    integer max_print, printed;
-    reg [`PSUM_DW-1:0] got, exp;
-    
-    begin
-        errors    = 0;
-        checks    = 0;
-        max_print = 50;
-        printed   = 0;
-        exp_words = `TEST_ROW * `TEST_COL * `TEST_CHNOUT;
-        $display("============================================================");
-        $display("CONV CHECK START");
-
-        for (i = 0; i < exp_words; i = i + 1) begin
-            got = cap_pe_mem[i]; 
-            exp = expect_conv[i]; 
-            if (got !== exp) begin
-                errors = errors + 1;
-                if (printed < max_print) begin
-                    $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
-                            $time, i, got, exp);
-                    printed = printed + 1;
-                end
-            end
-            checks = checks + 1;
-        end
-
-        // --------- summary ---------
-        $display("------------------------------------------------------------");
-        $display("CONV CHECK SUMMARY @%0t", $time);
-        $display("  total=%0d  match=%0d  errors=%0d",
-                checks, checks - errors, errors);
-        if (errors == 0) begin
-            $display("RESULT: PASS");
-        end else begin
-            $display("RESULT: FAIL");
-        end
-        $display("============================================================");
-        // -----------------------------------------------
-
-    end
-endtask
-
-
-task automatic tb_check_affine_result;
-    integer i;
-    integer exp_words;
-    integer errors, checks;
-    integer max_print, printed;
-    reg [`OFM_DW-1:0] got, exp;
-    
-    begin
-        errors    = 0;
-        checks    = 0;
-        max_print = 50;
-        printed   = 0;
-        exp_words = `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
-        $display("============================================================");
-        $display("AFFINE CHECK START");
-
-        for (i = 0; i < exp_words; i = i + 1) begin
-            got = cap_pp_mem[i]; 
-            exp = expect_aff[i]; 
-            if (got !== exp) begin
-                errors = errors + 1;
-                if (printed < max_print) begin
-                    $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
-                            $time, i, got, exp);
-                    printed = printed + 1;
-                end
-            end
-            checks = checks + 1;
-        end
-
-        // --------- summary ---------
-        $display("------------------------------------------------------------");
-        $display("AFFINE CHECK SUMMARY @%0t", $time);
-        $display("  total=%0d  match=%0d  errors=%0d",
-                checks, checks - errors, errors);
-        if (errors == 0) begin
-            $display("RESULT: PASS");
-        end else begin
-            $display("RESULT: FAIL");
-        end
-        $display("============================================================");
-        // -----------------------------------------------
-    end
-endtask
-
-
-task automatic tb_check_maxpool_result;
-    integer i;
-    integer exp_words;
-    integer errors, checks;
-    integer max_print, printed;
-    reg [`OFM_DW-1:0] got, exp;
-    
-    begin
-        errors    = 0;
-        checks    = 0;
-        max_print = 50;
-        printed   = 0;
-        $display("============================================================");
-        $display("MAXPOOL CHECK START");
-        if (u_yolo_engine.q_maxpool_stride == 1) begin 
-            $display("STRIDE = 1");
-            exp_words = `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
-        end else if (u_yolo_engine.q_maxpool_stride == 2) begin 
-            $display("STRIDE = 2");
-            exp_words = `TEST_ROW/2 * `TEST_COL/2 * `TEST_T_CHNOUT;
-        end
-
-
-        for (i = 0; i < exp_words; i = i + 1) begin
-            got = cap_mp_mem[i]; 
-            if (u_yolo_engine.q_maxpool_stride == 1) begin 
-                exp = expect_mp1[i];
-            end else if (u_yolo_engine.q_maxpool_stride == 2) begin 
-                exp = expect_mp2[i];
-            end
-            if (got !== exp) begin
-                errors = errors + 1;
-                if (printed < max_print) begin
-                    $display("[%0t] MIS idx=%0d : got=%h  exp=%h",
-                            $time, i, got, exp);
-                    printed = printed + 1;
-                end
-            end
-            checks = checks + 1;
-        end
-
-        // --------- summary ---------
-        $display("------------------------------------------------------------");
-        $display("MAXPOOL CHECK SUMMARY @%0t", $time);
-        $display("  total=%0d  match=%0d  errors=%0d",
-                checks, checks - errors, errors);
-        if (errors == 0) begin
-            $display("RESULT: PASS");
-        end else begin
-            $display("RESULT: FAIL");
-        end
-        $display("============================================================");
-        // -----------------------------------------------
-    end
-endtask
 
 
 task automatic tb_check_multilayer_result;
@@ -509,14 +331,13 @@ task automatic tb_check_multilayer_result;
         $display("============================================================");
         $display("MULTILAYER CHECK START");
 
-        exp_words = 8*8*16;
+        exp_words = `TEST_L2_ROW * `TEST_L2_COL * `TEST_L2_CHANNEL;
         // `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
 
 
-
         for (i = 0; i < exp_words; i = i + 1) begin
-            got = cap_mp_mem[i]; 
-            exp = expect_ml[i];
+            got = result[i]; 
+            exp = expect[i];
             if (got !== exp) begin
                 errors = errors + 1;
                 if (printed < max_print) begin
@@ -552,9 +373,6 @@ always @(posedge clk) begin
     if (network_done && !checked_done) begin
         @(posedge clk);
         @(posedge clk);
-        // tb_check_conv_result();
-        // tb_check_affine_result();
-        // tb_check_maxpool_result();
         tb_check_multilayer_result();
         @(posedge clk);
         checked_done <= 1'b1;
