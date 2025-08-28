@@ -54,7 +54,8 @@ module buffer_manager #(
     
 
     // Buffer Manager: ifm tap read
-    input  wire                         tap_ifm_read_vld,   // *if activated, the function as another ifm buffer is interrupted.
+    input  wire                         tap_ifm_vld,        // latch *if activated, the function as another ifm buffer is interrupted.
+    input  wire                         tap_ifm_read_vld,
     input  wire [IFM_AW-1:0]            tap_ifm_read_addr,
     output wire [IFM_DW-1:0]            tap_ifm_read_data,
 
@@ -696,9 +697,9 @@ u_row_buf2(
 //============================================================================
 
 // ifm access logic
-assign ifm_buf_read_addr  = tap_ifm_read_vld ? tap_ifm_read_addr : (pf_run ? pf_ifm_addr : reg_ifm_addr);
-assign ifm_buf_read_en    = tap_ifm_read_vld ? 1'b1              : (pf_run | (control_pipe[BM_DELAY-2][CTRL_DATA_RUN] & ~control_pipe[BM_DELAY-2][IS_LAST_ROW]));
-assign tap_ifm_read_data  = ifm_buf_read_data;
+assign ifm_buf_read_addr  = tap_ifm_vld ? tap_ifm_read_addr : (pf_run ? pf_ifm_addr : reg_ifm_addr);
+assign ifm_buf_read_en    = tap_ifm_vld ? tap_ifm_read_vld  : (pf_run | (control_pipe[BM_DELAY-2][CTRL_DATA_RUN] & ~control_pipe[BM_DELAY-2][IS_LAST_ROW]));
+assign tap_ifm_read_data  = tap_ifm_vld ? ifm_buf_read_data : 0;
 
 
 assign o_bm_csync_done = c_ctrl_csync_run & fb_req_possible & pf_done;
