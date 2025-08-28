@@ -53,11 +53,19 @@ module buffer_manager #(
     input  wire                         q_fm_buf_switch,  // ofm <-> ifm switch <=> q_layer_done
     
 
-    // Buffer Manager: ifm tap read
+    // Buffer Manager: ifm tap read (dram save)
     input  wire                         tap_ifm_vld,        // latch *if activated, the function as another ifm buffer is interrupted.
     input  wire                         tap_ifm_read_vld,
     input  wire [IFM_AW-1:0]            tap_ifm_read_addr,
     output wire [IFM_DW-1:0]            tap_ifm_read_data,
+
+
+    // aux port for route (postprocessor -> ifm buffer or rte_buf -> ifm_buffer)
+    input  wire                         rte_ifm_vld,        // must be separated from the area being calculated
+    input  wire                         rte_ifm_write_vld,
+    input  wire [IFM_AW-1:0]            rte_ifm_write_addr,
+    input  wire [IFM_DW-1:0]            rte_ifm_write_data,
+
 
 
     // Buffer Manager <-> AXI
@@ -261,24 +269,38 @@ end
 //----------------------------------------------------------------------------
 assign fm_buf0_wea        = (axi_ifm_ena)      ? axi_ifm_wr_en     
                           : (fm_buf0_ptr==OFM) ? ofm_buf_wea        
+                          : (fm_buf0_ptr==IFM) ? (rte_ifm_vld ? rte_ifm_write_vld : 1'b0)
                           : 1'b0;
 
 assign fm_buf0_write_addr = (axi_ifm_ena)      ? axi_ifm_wr_addr     
                           : (fm_buf0_ptr==OFM) ? ofm_buf_write_addr 
+                          : (fm_buf0_ptr==IFM) ? (rte_ifm_vld ? rte_ifm_write_addr : {FM_AW{1'b0}})
                           : {FM_AW{1'b0}};
 
 assign fm_buf0_write_data = (axi_ifm_ena)      ? axi_ifm_wr_data
                           : (fm_buf0_ptr==OFM) ? ofm_buf_write_data 
+                          : (fm_buf0_ptr==IFM) ? (rte_ifm_vld ? rte_ifm_write_data : {FM_DW{1'b0}})
                           : {FM_DW{1'b0}};
 
 assign fm_buf0_read_en    = (fm_buf0_ptr==IFM) ? ifm_buf_read_en    : 1'b0;
 assign fm_buf0_read_addr  = (fm_buf0_ptr==IFM) ? ifm_buf_read_addr  : {FM_AW{1'b0}};
 
-assign fm_buf1_wea        = (fm_buf1_ptr==OFM) ? ofm_buf_wea        : 1'b0;
-assign fm_buf1_write_addr = (fm_buf1_ptr==OFM) ? ofm_buf_write_addr : {FM_AW{1'b0}};
-assign fm_buf1_write_data = (fm_buf1_ptr==OFM) ? ofm_buf_write_data : {FM_DW{1'b0}};
+
+assign fm_buf1_wea        = (fm_buf1_ptr==OFM) ? ofm_buf_wea     
+                          : (fm_buf1_ptr==IFM) ? (rte_ifm_vld ? rte_ifm_write_vld : 1'b0)
+                          : 1'b0;
+
+assign fm_buf1_write_addr = (fm_buf1_ptr==OFM) ? ofm_buf_write_addr 
+                          : (fm_buf1_ptr==IFM) ? (rte_ifm_vld ? rte_ifm_write_addr : {FM_AW{1'b0}})
+                          : {FM_AW{1'b0}};
+
+assign fm_buf1_write_data = (fm_buf1_ptr==OFM) ? ofm_buf_write_data 
+                          : (fm_buf1_ptr==IFM) ? (rte_ifm_vld ? rte_ifm_write_data : {FM_DW{1'b0}})
+                          : {FM_DW{1'b0}};
+
 assign fm_buf1_read_en    = (fm_buf1_ptr==IFM) ? ifm_buf_read_en    : 1'b0;
 assign fm_buf1_read_addr  = (fm_buf1_ptr==IFM) ? ifm_buf_read_addr  : {FM_AW{1'b0}};
+
 
 assign ifm_buf_read_data  = (fm_buf0_ptr==IFM) ? fm_buf0_read_data :
                             (fm_buf1_ptr==IFM) ? fm_buf1_read_data :
