@@ -64,11 +64,6 @@
 `define FILTER_BUFFER_DEPTH     512
 `define FILTER_BUFFER_AW        $clog2(`FILTER_BUFFER_DEPTH)
 
-// `define IFM_TOTAL_BUFFER_DW     `IFM_DW // 32
-// `define IFM_TOTAL_BUFFER_DEPTH  65536  // 256KB / 4B
-// `define IFM_TOTAL_BUFFER_AW     $clog2(`IFM_TOTAL_BUFFER_DEPTH)  // 256KB / 4B
-
-
 `define IFM_ROW_BUFFER_CNT      `K
 `define IFM_ROW_BUFFER_DW       `IFM_DW // 32
 `define IFM_ROW_BUFFER_DEPTH    1536    // 6KB  / 4
@@ -97,5 +92,8 @@
 `define MAXPOOL_BUFFER_AW       $clog2(`MAXPOOL_BUFFER_DEPTH)
 
 
+// route
+`define ROUTE_BUFFER_DEPTH      512
+`define ROUTE_BUFFER_AW         $clog2(`ROUTE_BUFFER_DEPTH)
 
 `endif
