@@ -288,11 +288,12 @@ function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
 endfunction
 
 
-// {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
+// {q_last_layer, q_ofm_save, q_route_chn_offset, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
 
 // 60
 localparam W_ENTRY = 1                  // q_last_layer         1
                    + 1                  // q_ofm_save           1
+                   + W_CHANNEL          // q_route_chn_offset   8
                    + IFM_AW             // q_route_offset       16
                    + 2                  // q_route_loc          2
                    + 1                  // q_route_load_swap    1
@@ -556,12 +557,22 @@ reg                         q_load_scale;
 reg                         q_route_save;
 reg                         q_route_load;
 reg                         q_route_load_swap;
-reg  [1:0]                  q_route_loc;    // 0-> ifm(feed back), 1-> additional buf, 2-> dram
+reg  [1:0]                  q_route_loc;    // 0-> ifm(feed back), 1-> rte buf, 2-> dram
 reg  [IFM_AW-1:0]           q_route_offset; // address offset
 
 reg                         q_ofm_save;
 
 reg                         q_fm_buf_switch;
+
+// address sequencer (upsample && route)
+localparam                  AS_UPSAMPLE = 1'b0;
+localparam                  AS_ROUTE    = 1'b1;
+
+reg                         q_as_start;
+reg                         q_as_mode;
+reg  [W_CHANNEL-1:0]        q_route_chn_offset;
+
+
 
 
 // 관찰용 완료 신호(하위에서 만들어 줘야 함)
@@ -571,6 +582,7 @@ reg                         q_fm_buf_switch;
 wire dma_ifm_load_done;     // 
 wire dma_ofm_write_done;
 wire layer_done;            // cnn_ctrl
+wire as_done;   // load done
 
 
 reg [2:0] q_state;
@@ -581,52 +593,58 @@ localparam
     S_LOAD_CFG2     = 3'd2,
     S_LOAD_IFM      = 3'd3, // initial once
     S_SAVE_OFM      = 3'd4, // layer 14, 20
-    S_ROUTE_LOAD    = 3'd5, // route load
-    S_WAIT_CNN_CTRL = 3'd6; // each layer
+    S_ROUTE_LOAD    = 3'd5, // route load (rte buf) && route load (ifm)
+    S_WAIT_CNN_CTRL = 3'd6, // each layer
+    S_WAIT_UPSAMPLE = 3'd7; // upsample wait
 
 
 
 always @(posedge clk or negedge rstn) begin
     if (!rstn) begin
-        q_state          <= S_IDLE;
-        q_layer          <= 0;
-        q_c_ctrl_start   <= 0;
+        q_state             <= S_IDLE;
+        q_layer             <= 0;
+        q_c_ctrl_start      <= 0;
 
-        q_layer          <= 0;
-        q_width          <= 0;
-        q_height         <= 0;
-        q_channel        <= 0;
-        q_channel_out    <= 0;
-        q_frame_size     <= 0;
-        q_row_stride     <= 0;
-        q_maxpool        <= 0;
-        q_maxpool_stride <= 0;
-        q_upsample       <= 0;
+        q_layer             <= 0;
+        q_width             <= 0;
+        q_height            <= 0;
+        q_channel           <= 0;
+        q_channel_out       <= 0;
+        q_frame_size        <= 0;
+        q_row_stride        <= 0;
+        q_maxpool           <= 0;
+        q_maxpool_stride    <= 0;
+        q_upsample          <= 0;
 
-        q_route_save     <= 0;
-        q_route_load     <= 0;
-        q_route_load_swap<= 0;
-        q_route_loc      <= 0;
-        q_route_offset   <= 0;
+        q_route_save        <= 0;
+        q_route_load        <= 0;
+        q_route_load_swap   <= 0;
+        q_route_loc         <= 0;
+        q_route_offset      <= 0;
 
-        q_last_layer     <= 0;
+        q_last_layer        <= 0;
 
-        q_load_ifm       <= 0;
-        q_load_filter    <= 0;
-        q_load_bias      <= 0;
-        q_load_scale     <= 0;
+        q_load_ifm          <= 0;
+        q_load_filter       <= 0;
+        q_load_bias         <= 0;
+        q_load_scale        <= 0;
 
-        q_ofm_save       <= 0;
+        q_ofm_save          <= 0;
 
-        q_fm_buf_switch  <= 0;
+        q_fm_buf_switch     <= 0;
+
+        q_as_start          <= 0;
+        q_as_mode           <= 0;
+        q_route_chn_offset  <= 0;
 
         // layer info reset...
 
         rte_buf_load_req <= 0;
     end
     else begin
-        q_c_ctrl_start <= 1'b0; // pulse
+        q_c_ctrl_start <= 0; // pulse
         q_fm_buf_switch <= 0; // pulse
+        q_as_start <= 0 // pulse
 
         case (q_state)
             S_IDLE: begin
@@ -640,9 +658,9 @@ always @(posedge clk or negedge rstn) begin
             // FETCH
             S_LOAD_CFG1: begin
                 if (debug_on) begin 
-                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
+                    {q_last_layer, q_ofm_save, q_route_chn_offset, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
                 end else begin 
-                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
+                    {q_last_layer, q_ofm_save, q_route_chn_offset, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
                 end
                 
                 q_frame_size <= q_width * q_height * q_channel;
@@ -659,9 +677,25 @@ always @(posedge clk or negedge rstn) begin
                     q_state <= S_SAVE_OFM;
                 end else if (q_route_load) begin
                     q_state <= S_ROUTE_LOAD;
+                    
+                    // NOT USE.. current decoding logic has problem with route_load_swap
                     if (q_route_load_swap) begin 
                         q_fm_buf_switch <= 1;
                     end
+
+                    if (q_route_loc == 0) begin 
+                        // ifm
+                        q_as_start <= 1;
+                        q_as_mode  <= AS_ROUTE;
+                    end else if (q_route_loc == 1) begin 
+                        // rte buf
+                        rte_buf_load_req <= 1;
+                    end
+
+                end else if (q_upsample) begin 
+                    q_state <= S_WAIT_UPSAMPLE;
+                    q_as_mode <= AS_UPSAMPLE;
+                    q_as_start <= 1;
                 end else begin 
                     q_c_ctrl_start <= 1'b1;
                     q_state <= S_WAIT_CNN_CTRL;
@@ -689,8 +723,13 @@ always @(posedge clk or negedge rstn) begin
             end
 
             S_ROUTE_LOAD: begin 
-                rte_buf_load_req <= 1;
-                if (rte_buf_load_done) begin 
+                // rte_buf_load_req <= 1;
+                if (q_route_loc == 0 && as_done) begin 
+                    q_layer <= q_layer + 1;
+                    q_state <= S_LOAD_CFG1;
+                end
+
+                if (q_route_loc == 1 && rte_buf_load_done) begin 
                     q_layer <= q_layer + 1;
                     q_state <= S_LOAD_CFG1;
                     rte_buf_load_req <= 0;
@@ -1215,10 +1254,14 @@ assign dma_wr_num_trans         = num_trans;
 //-------------------------------------------------------------------------------------------
 // ofm    : eff_w * eff_h * q_channel       = q_frame_size << 2     => q_frame_size >> 4        
 
+// dma <-> buffer manager
+wire                            dma_tap_ifm_vld       = in_save_ofm_stage;
+wire                            dma_tap_ifm_read_vld  = indata_req_wr;
+wire [IFM_AW-1:0]               dma_tap_ifm_read_addr = (dma_wr_blk_idx << 4) + write_data_cnt;
 
-assign tap_ifm_vld          = in_save_ofm_stage;
-assign tap_ifm_read_vld     = indata_req_wr;
-assign tap_ifm_read_addr    = (dma_wr_blk_idx << 4) + write_data_cnt;
+// assign tap_ifm_vld          = in_save_ofm_stage;
+// assign tap_ifm_read_vld     = indata_req_wr;
+// assign tap_ifm_read_addr    = (dma_wr_blk_idx << 4) + write_data_cnt;
 assign write_data           = tap_ifm_read_data;
 
 
@@ -1416,6 +1459,7 @@ u_dma_write(
 //--------------------------------------------------------------------
 // wire for submodule
 //--------------------------------------------------------------------
+wire in_route_load_ifm_stage = q_route_load && (q_route_loc == 0);
 
 // BM read tap
 wire                        tap_ifm_vld;
@@ -1423,11 +1467,24 @@ wire                        tap_ifm_read_vld;
 wire [IFM_AW-1:0]           tap_ifm_read_addr;
 wire [IFM_DW-1:0]           tap_ifm_read_data;
 
+// mux for tap port
+assign tap_ifm_vld       = in_save_ofm_stage       ? dma_tap_ifm_vld
+                         : in_route_load_ifm_stage ? 1                // route load from ifm
+                         : 0;    
+
+assign tap_ifm_read_vld  = in_save_ofm_stage       ? dma_tap_ifm_read_vld
+                         : in_route_load_ifm_stage ? as_rd_vld
+                         : 0;
+
+assign tap_ifm_read_addr = in_save_ofm_stage       ? dma_tap_ifm_read_addr
+                         : in_route_load_ifm_stage ? as_rd_addr
+                         : 0;
+
 
 // rte ports (when route load)
 // rte control signal
 reg                         rte_buf_load_req;
-wire                        rte_buf_load_done; 
+wire                        rte_buf_load_done;  
 
 wire                        rte_aux_vld;
 wire                        rte_aux_write_vld;
@@ -1492,14 +1549,32 @@ wire [W_CHANNEL-1:0]        pp_chn_out;
 
 // maxpool
 wire                        mp_data_vld;
-wire  [OFM_DW-1:0]          mp_data;
-wire  [OFM_AW-1:0]          mp_addr;
+wire [OFM_DW-1:0]           mp_data;
+wire [OFM_AW-1:0]           mp_addr;
+
+// address sequencer TODO: connect
+// wire                        as_done;
+
+
+wire                        as_rd_vld;  // go to ifm read port (tap read)
+wire [IFM_AW-1:0]           as_rd_addr; // go to ifm read port (tap read)
+
+wire                        as_wr_vld;  // go to ofm mux
+wire [OFM_AW-1:0]           as_wr_addr; // go to ofm mux
+
 
 // ofm mux
-wire                        mux_ofm_data_vld = q_maxpool ? mp_data_vld : pp_data_vld;
-wire  [OFM_DW-1:0]          mux_ofm_data     = q_maxpool ? mp_data     : pp_data;
-wire  [OFM_AW-1:0]          mux_ofm_addr     = q_maxpool ? mp_addr     : pp_addr;
+wire                        mux_ofm_data_vld = q_maxpool               ? mp_data_vld 
+                                             : in_route_load_ifm_stage ? as_wr_vld
+                                             :  pp_data_vld;
 
+wire  [OFM_DW-1:0]          mux_ofm_data     = q_maxpool               ? mp_data     
+                                             : in_route_load_ifm_stage ? tap_ifm_read_data 
+                                             : pp_data;
+
+wire  [OFM_AW-1:0]          mux_ofm_addr     = q_maxpool               ? mp_addr     
+                                             : in_route_load_ifm_stage ? as_wr_addr
+                                             : pp_addr;
 //---------------------------------------------------------------------- 
 cnn_ctrl u_cnn_ctrl (
     .clk                (clk                ),
@@ -1723,8 +1798,7 @@ maxpool u_maxpool (
     .o_mp_data          (mp_data            ),
     .o_mp_addr          (mp_addr            )
 );
-
-
+//----------------------------------------------------------------------
 route_buffer u_route_buffer (
     .clk                (clk                ),
     .rstn               (rstn               ),
@@ -1750,6 +1824,34 @@ route_buffer u_route_buffer (
     .rte_aux_write_vld  (rte_aux_write_vld  ),
     .rte_aux_write_addr (rte_aux_write_addr ),
     .rte_aux_write_data (rte_aux_write_data )
+);
+//---------------------------------------------------------------------- 
+addr_sequencer u_addr_sequencer(
+    .clk                (clk                ), 
+    .rstn               (rstn               ),
+
+    // Addr Sequencer <-> TOP
+    .q_width            (q_width            ),
+    .q_height           (q_height           ),
+    .q_channel          (q_channel          ),
+    .q_channel_out      (q_channel_out      ),
+    .q_row_stride       (q_row_stride       ),
+
+    .q_as_start         (q_as_start         ),  // ADD  // from top fsm
+
+    .o_as_done          (as_done            ),  // ADD  // go to top fsm
+
+    .q_as_mode          (q_as_mode          ),  // ADD  // from top fsm
+
+    .q_route_offset     (q_route_offset     ),
+    .q_route_chn_offset (q_route_chn_offset ),  // ADD  // from top fsm
+
+    // RD/WR addr 
+    .o_as_rd_vld        (as_rd_vld          ),  // ADD  // go to ifm port
+    .o_as_rd_addr       (as_rd_addr         ),  // ADD
+
+    .o_as_wr_vld        (as_wr_vld          ),  // ADD  // go to ofm port
+    .o_as_wr_addr       (as_wr_addr         )   // ADD
 );
 
 endmodule
