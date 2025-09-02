@@ -87,8 +87,8 @@ addr_sequencer u_addr_sequencer(
 .q_row_stride(q_row_stride),   // q_width * q_channel
 
 
-.q_addr_seq_start(q_addr_seq_start),
-.addr_seq_done(addr_seq_done),
+.q_as_start(q_addr_seq_start),
+.o_as_done(addr_seq_done),
 
 .q_as_mode(q_as_mode),          // 0 -> upsample, 1 -> route
 
@@ -96,12 +96,12 @@ addr_sequencer u_addr_sequencer(
 .q_route_chn_offset(q_route_chn_offset),
 
 // RD/WR addr 
-.as_rd_vld(as_rd_vld),
-.as_rd_addr(as_rd_addr),
+.o_as_rd_vld(as_rd_vld),
+.o_as_rd_addr(as_rd_addr),
 
 // one cycle delay
-.as_wr_vld(as_wr_vld),
-.as_wr_addr(as_wr_addr)
+.o_as_wr_vld(as_wr_vld),
+.o_as_wr_addr(as_wr_addr)
 );
 
 endmodule

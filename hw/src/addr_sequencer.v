@@ -23,8 +23,8 @@ module addr_sequencer #(
     input  wire [W_SIZE+W_CHANNEL-1:0]  q_row_stride,   // q_width * q_channel
 
 
-    input  wire                         q_addr_seq_start,
-    output wire                         addr_seq_done,
+    input  wire                         q_as_start,
+    output wire                         o_as_done,
 
     input  wire                         q_as_mode,          // 0 -> upsample, 1 -> route
 
@@ -32,12 +32,12 @@ module addr_sequencer #(
     input  wire [W_CHANNEL-1:0]         q_route_chn_offset,
 
     // RD/WR addr 
-    output wire                         as_rd_vld,
-    output wire [IFM_AW-1:0]            as_rd_addr,
+    output wire                         o_as_rd_vld,
+    output wire [IFM_AW-1:0]            o_as_rd_addr,
 
     // one cycle delay
-    output wire                         as_wr_vld,
-    output wire [OFM_AW-1:0]            as_wr_addr
+    output wire                         o_as_wr_vld,
+    output wire [OFM_AW-1:0]            o_as_wr_addr
 );
 
 //============================================================================
@@ -136,7 +136,7 @@ always @(posedge clk or negedge rstn) begin
         up_running <= 0;
     end else begin 
         up_start <= 0;
-        if (m_up && q_addr_seq_start) begin 
+        if (m_up && q_as_start) begin 
             up_start   <= 1;
             up_running <= 1;
         end
@@ -249,7 +249,7 @@ always @(posedge clk or negedge rstn) begin
         rte_running <= 0;
     end else begin 
         rte_start <= 0;
-        if (m_rte && q_addr_seq_start) begin 
+        if (m_rte && q_as_start) begin 
             rte_start   <= 1;
             rte_running <= 1;
         end
@@ -323,23 +323,23 @@ end
 //============================================================================
 assign c_sequencer_start = m_up ? up_start : rte_start;
 
-assign addr_seq_done = c_sequencer_done_d;
+assign o_as_done    = c_sequencer_done_d;
 
-assign as_rd_vld    = up_rd_vld  ? up_rd_vld
+assign o_as_rd_vld  = up_rd_vld  ? up_rd_vld
                     : rte_rd_vld ? rte_rd_vld
                     : 0;
 
-assign as_rd_addr   = up_rd_vld   ? up_rd_addr
+assign o_as_rd_addr = up_rd_vld   ? up_rd_addr
                     : rte_rd_vld  ? rte_rd_addr
                     : 0;
 
 
 
-assign as_wr_vld    = up_wr_vld_d  ? up_wr_vld_d
+assign o_as_wr_vld  = up_wr_vld_d  ? up_wr_vld_d
                     : rte_wr_vld_d ? rte_wr_vld_d
                     : 0;
 
-assign as_wr_addr   = up_wr_vld_d  ? up_wr_addr_d
+assign o_as_wr_addr = up_wr_vld_d  ? up_wr_addr_d
                     : rte_wr_vld_d ? rte_wr_addr_d
                     : 0;
 
