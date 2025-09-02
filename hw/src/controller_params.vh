@@ -93,7 +93,7 @@
 
 
 // route
-`define ROUTE_BUFFER_DEPTH      512
+`define ROUTE_BUFFER_DEPTH      4096
 `define ROUTE_BUFFER_AW         $clog2(`ROUTE_BUFFER_DEPTH)
 
 `endif

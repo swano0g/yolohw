@@ -6,8 +6,7 @@ module yolo_engine_tb;
 // select test case
 // `define TESTCASE_0 1
 // `define TESTCASE_1 1
- `define TESTCASE_2 1
-
+`define TESTCASE_2 1
 
 // `include "define.v"
 `include "sim_cfg.vh"
@@ -21,16 +20,13 @@ localparam I = 4;
 localparam L = 8;
 localparam M = D/8;
 
-// localparam DRAM_IFM_OFFSET    = 0;
-// localparam DRAM_FILTER_OFFSET = `TEST_MEMORY_FILT_OFFSET;
-// localparam DRAM_BIAS_OFFSET   = `TEST_MEMORY_BIAS_OFFSET;
-// localparam DRAM_SCALE_OFFSET  = `TEST_MEMORY_SCALE_OFFSET; 
 
-localparam DRAM_IFM_OFFSET    = 0;
-localparam DRAM_FILTER_OFFSET = 4096;
-localparam DRAM_BIAS_OFFSET   = 27136;
-localparam DRAM_SCALE_OFFSET  = 27520;
-localparam DRAM_OFM_OFFSET    = 32768;
+
+localparam DRAM_IFM_OFFSET    = `DRAM_IFM_OFFSET;
+localparam DRAM_FILTER_OFFSET = `DRAM_FILTER_OFFSET;
+localparam DRAM_BIAS_OFFSET   = `DRAM_BIAS_OFFSET;
+localparam DRAM_SCALE_OFFSET  = `DRAM_SCALE_OFFSET;
+localparam DRAM_OFM_OFFSET    = `DRAM_OFM_OFFSET;
 
 // Clock
 parameter CLK_PERIOD = 10;   //100MHz
@@ -267,9 +263,8 @@ initial begin
    #(4*CLK_PERIOD) rstn = 1'b1; 
    #(100*CLK_PERIOD) 
         @(posedge clk)
-            i_0 = 32'd3; // ... _0011  debug_monolayer
-            // i_0 = 32'd5;            // ... _0101  debug_multlayer
-            i_1 = 32'd0;            // read addr
+            i_0 = 32'd3; // ... _0011  debug_on
+            i_1 = DRAM_IFM_OFFSET;  // read addr
             i_2 = DRAM_OFM_OFFSET;  // write addr
 
    #(100*CLK_PERIOD) 
@@ -331,7 +326,7 @@ task automatic tb_check_multilayer_result;
         $display("============================================================");
         $display("MULTILAYER CHECK START");
 
-        exp_words = `TEST_L2_ROW * `TEST_L2_COL * `TEST_L2_CHANNEL;
+        exp_words = `EXPECT_LINE;
         // `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
 
 

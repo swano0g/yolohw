@@ -139,6 +139,21 @@ reg	[DW-1			:	0]		rdata;
 				.doutb   (dob)
 			);
 	    end
+		else if((DEPTH == 4096) && (DW == 32)) begin: gen_dpram_4096x32
+			dpram_4096x32 u_dpram_4096x32 (
+				// write ports
+				.clka    (clk),
+				.ena     (ena),
+				.wea     (wea),
+				.addra   (addra),
+				.dina    (dia),
+				// read ports 
+				.clkb    (clk),
+				.enb     (enb),
+				.addrb   (addrb),
+				.doutb   (dob)
+			);
+	    end
 	endgenerate
 `else
 	//------------------------------------------------------------------------+

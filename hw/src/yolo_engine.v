@@ -44,6 +44,8 @@ module yolo_engine #(
     parameter PE_FILTER_FLAT_BW     = `PE_FILTER_FLAT_BW,
     parameter PE_ACCO_FLAT_BW       = `PE_ACCO_FLAT_BW,
 
+    // parameter RTE_AW                = ROUTE_BUFFER_AW,
+
     parameter TEST_COL              = 16,
     parameter TEST_ROW              = 16, 
     parameter TEST_T_CHNIN          = 4,
@@ -57,7 +59,7 @@ module yolo_engine #(
     input                           clk, 
     input                           rstn,
 
-    input [31:0]                    i_ctrl_reg0,    // network_start, // {debug_big(1), debug_buf_select(16), debug_buf_addr(9)}
+    input [31:0]                    i_ctrl_reg0,    // network_start, // {network_start(0), debug_on(1)}
     input [31:0]                    i_ctrl_reg1,    // Read address base -> ifm, filter, bias, scale
     input [31:0]                    i_ctrl_reg2,    // Write address base -> ofm
     input [31:0]                    i_ctrl_reg3,    // Write address base
@@ -120,7 +122,7 @@ localparam BIT_TRANS = 18;
 //================================================================
 // 1) Parse control signals
 //================================================================
-reg         debug_on;
+reg debug_on;
 
 
 //CSR
@@ -272,39 +274,40 @@ endfunction
 
 function [IFM_AW-1:0] fit_aw;
     input [63:0] x; 
-    begin fit_wch = x[IFM_AW-1:0]; end
+    begin fit_aw = x[IFM_AW-1:0]; end
 endfunction
 
-// function [W_FRAME_SIZE-1:0] fit_wframe;
-//     input [63:0] x; 
-//     begin fit_wframe = x[W_FRAME_SIZE-1:0]; end
-// endfunction
+function [W_FRAME_SIZE-1:0] fit_wframe;
+    input [63:0] x; 
+    begin fit_wframe = x[W_FRAME_SIZE-1:0]; end
+endfunction
 
-// function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
-//     input [63:0] x;
-//     begin fit_row_stride = x[W_SIZE+W_CHANNEL-1:0]; end
-// endfunction
-
-
-// {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
-
-// 40 + 19
-localparam W_ENTRY = 1                  // q_last_layer
-                   + 1                  // q_ofm_save
-                   + IFM_AW             // q_route_offset
-                   + 2                  // q_route_loc
-                   + 1                  // q_route_load
-                   + 1                  // q_route_save
-                   + 1                  // q_upsample
-                   + 1                  // q_maxpool
-                   + 2                  // q_maxpool_stride 
-                   + W_CHANNEL          // q_channel_out    8
-                   + W_CHANNEL          // q_channel        8
-                   + W_SIZE             // q_height         9
-                   + W_SIZE;            // q_width          9
+function [W_SIZE+W_CHANNEL-1:0] fit_row_stride;
+    input [63:0] x;
+    begin fit_row_stride = x[W_SIZE+W_CHANNEL-1:0]; end
+endfunction
 
 
-// 미완 수정필요
+// {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width}
+
+// 60
+localparam W_ENTRY = 1                  // q_last_layer         1
+                   + 1                  // q_ofm_save           1
+                   + IFM_AW             // q_route_offset       16
+                   + 2                  // q_route_loc          2
+                   + 1                  // q_route_load_swap    1
+                   + 1                  // q_route_load         1
+                   + 1                  // q_route_save         1
+                   + 1                  // q_upsample           1
+                   + 1                  // q_maxpool            1
+                   + 2                  // q_maxpool_stride     2
+                   + W_CHANNEL          // q_channel_out        8
+                   + W_CHANNEL          // q_channel            8
+                   + W_SIZE             // q_height             9
+                   + W_SIZE;            // q_width              9
+
+
+// FIXME
 function [W_ENTRY-1:0] layer_entry;
     input [4:0] q_layer;
     begin
@@ -414,7 +417,7 @@ function [W_ENTRY-1:0] layer_entry;
 endfunction
 
 
-// debug
+// instruction set for debug
 `include "sim_multi_cfg.vh"
 function [W_ENTRY-1:0] dbg_layer_entry;
     input [4:0] q_layer;
@@ -426,7 +429,9 @@ function [W_ENTRY-1:0] dbg_layer_entry;
                 fit_1bit(`TEST_L0_OFM_SAVE),        // ofm_save
                 fit_aw(`TEST_L0_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L0_ROUTE_LOC),       // route_loc
-                fit_1bit(`TEST_L0_ROUTE),           // route
+                fit_1bit(`TEST_L0_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`TEST_L0_ROUTE_LOAD),      // route_load
+                fit_1bit(`TEST_L0_ROUTE_SAVE),      // route_save
                 fit_1bit(`TEST_L0_UPSAMPLE),        // upsample
                 fit_1bit(`TEST_L0_MAXPOOL),         // maxpool
                 fit_2bit(`TEST_L0_MAXPOOL_STRIDE),  // maxpool_stride
@@ -440,7 +445,9 @@ function [W_ENTRY-1:0] dbg_layer_entry;
                 fit_1bit(`TEST_L1_OFM_SAVE),        // ofm_save
                 fit_aw(`TEST_L1_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L1_ROUTE_LOC),       // route_loc
-                fit_1bit(`TEST_L1_ROUTE),           // route
+                fit_1bit(`TEST_L1_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`TEST_L1_ROUTE_LOAD),      // route_load
+                fit_1bit(`TEST_L1_ROUTE_SAVE),      // route_save
                 fit_1bit(`TEST_L1_UPSAMPLE),        // upsample
                 fit_1bit(`TEST_L1_MAXPOOL),         // maxpool
                 fit_2bit(`TEST_L1_MAXPOOL_STRIDE),  // maxpool_stride
@@ -454,7 +461,9 @@ function [W_ENTRY-1:0] dbg_layer_entry;
                 fit_1bit(`TEST_L2_OFM_SAVE),        // ofm_save
                 fit_aw(`TEST_L2_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L2_ROUTE_LOC),       // route_loc
-                fit_1bit(`TEST_L2_ROUTE),           // route
+                fit_1bit(`TEST_L2_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`TEST_L2_ROUTE_LOAD),      // route_load
+                fit_1bit(`TEST_L2_ROUTE_SAVE),      // route_save
                 fit_1bit(`TEST_L2_UPSAMPLE),        // upsample
                 fit_1bit(`TEST_L2_MAXPOOL),         // maxpool
                 fit_2bit(`TEST_L2_MAXPOOL_STRIDE),  // maxpool_stride
@@ -468,7 +477,9 @@ function [W_ENTRY-1:0] dbg_layer_entry;
                 fit_1bit(`TEST_L3_OFM_SAVE),        // ofm_save
                 fit_aw(`TEST_L3_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L3_ROUTE_LOC),       // route_loc
-                fit_1bit(`TEST_L3_ROUTE),           // route
+                fit_1bit(`TEST_L3_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`TEST_L3_ROUTE_LOAD),      // route_load
+                fit_1bit(`TEST_L3_ROUTE_SAVE),      // route_save
                 fit_1bit(`TEST_L3_UPSAMPLE),        // upsample
                 fit_1bit(`TEST_L3_MAXPOOL),         // maxpool
                 fit_2bit(`TEST_L3_MAXPOOL_STRIDE),  // maxpool_stride
@@ -482,7 +493,9 @@ function [W_ENTRY-1:0] dbg_layer_entry;
                 fit_1bit(`TEST_L4_OFM_SAVE),        // ofm_save
                 fit_aw(`TEST_L4_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L4_ROUTE_LOC),       // route_loc
-                fit_1bit(`TEST_L4_ROUTE),           // route
+                fit_1bit(`TEST_L4_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`TEST_L4_ROUTE_LOAD),      // route_load
+                fit_1bit(`TEST_L4_ROUTE_SAVE),      // route_save
                 fit_1bit(`TEST_L4_UPSAMPLE),        // upsample
                 fit_1bit(`TEST_L4_MAXPOOL),         // maxpool
                 fit_2bit(`TEST_L4_MAXPOOL_STRIDE),  // maxpool_stride
@@ -490,6 +503,22 @@ function [W_ENTRY-1:0] dbg_layer_entry;
                 fit_wch(`TEST_L4_CHANNEL),          // channel (in)
                 fit_wsize(`TEST_L4_ROW),            // height
                 fit_wsize(`TEST_L4_COL)             // width
+                };
+        5'd5: dbg_layer_entry = {
+                fit_1bit(`TEST_L5_LAST_LAYER),      // last_layer
+                fit_1bit(`TEST_L5_OFM_SAVE),        // ofm_save
+                fit_aw(`TEST_L5_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`TEST_L5_ROUTE_LOC),       // route_loc
+                fit_1bit(`TEST_L5_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`TEST_L5_ROUTE_LOAD),      // route_load
+                fit_1bit(`TEST_L5_ROUTE_SAVE),      // route_save
+                fit_1bit(`TEST_L5_UPSAMPLE),        // upsample
+                fit_1bit(`TEST_L5_MAXPOOL),         // maxpool
+                fit_2bit(`TEST_L5_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`TEST_L5_CHANNEL_OUT),      // channel_out
+                fit_wch(`TEST_L5_CHANNEL),          // channel (in)
+                fit_wsize(`TEST_L5_ROW),            // height
+                fit_wsize(`TEST_L5_COL)             // width
                 };
         default: dbg_layer_entry = {W_ENTRY{1'b0}};
         endcase
@@ -526,6 +555,7 @@ reg                         q_load_scale;
 
 reg                         q_route_save;
 reg                         q_route_load;
+reg                         q_route_load_swap;
 reg  [1:0]                  q_route_loc;    // 0-> ifm(feed back), 1-> additional buf, 2-> dram
 reg  [IFM_AW-1:0]           q_route_offset; // address offset
 
@@ -547,11 +577,12 @@ reg [2:0] q_state;
 
 localparam 
     S_IDLE          = 3'd0, 
-    S_LOAD_IFM      = 3'd1, // initial once
-    S_SAVE_OFM      = 3'd2, // layer 14, 20
-    S_LOAD_CFG1     = 3'd3,
-    S_LOAD_CFG2     = 3'd4,
-    S_WAIT_CNN_CTRL = 3'd5;  // each layer
+    S_LOAD_CFG1     = 3'd1,
+    S_LOAD_CFG2     = 3'd2,
+    S_LOAD_IFM      = 3'd3, // initial once
+    S_SAVE_OFM      = 3'd4, // layer 14, 20
+    S_ROUTE_LOAD    = 3'd5, // route load
+    S_WAIT_CNN_CTRL = 3'd6; // each layer
 
 
 
@@ -574,6 +605,7 @@ always @(posedge clk or negedge rstn) begin
 
         q_route_save     <= 0;
         q_route_load     <= 0;
+        q_route_load_swap<= 0;
         q_route_loc      <= 0;
         q_route_offset   <= 0;
 
@@ -590,6 +622,7 @@ always @(posedge clk or negedge rstn) begin
 
         // layer info reset...
 
+        rte_buf_load_req <= 0;
     end
     else begin
         q_c_ctrl_start <= 1'b0; // pulse
@@ -602,26 +635,14 @@ always @(posedge clk or negedge rstn) begin
                     q_state <= S_LOAD_CFG1;
 
                 end
-            end
-
-            // IFM 초기 적재 대기.
-            S_LOAD_IFM: begin
-                if (dma_ifm_load_done) begin
-                    // 첫 레이어 실행 트리거는 다음 상태에서 cfg 로드 후 발생
-                    q_state        <= S_WAIT_CNN_CTRL;
-                    q_c_ctrl_start <= 1'b1;
-                end
-            end            
+            end       
             
             // FETCH
             S_LOAD_CFG1: begin
-
-                // ADD
-                // q_frame_size, q_row_stride: internal caculation
                 if (debug_on) begin 
-                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
+                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = dbg_layer_entry(q_layer);
                 end else begin 
-                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
+                    {q_last_layer, q_ofm_save, q_route_offset, q_route_loc, q_route_load_swap, q_route_load, q_route_save, q_upsample, q_maxpool, q_maxpool_stride, q_channel_out, q_channel, q_height, q_width} = layer_entry(q_layer);
                 end
                 
                 q_frame_size <= q_width * q_height * q_channel;
@@ -636,12 +657,23 @@ always @(posedge clk or negedge rstn) begin
                     q_state <= S_LOAD_IFM;
                 end else if (q_ofm_save) begin 
                     q_state <= S_SAVE_OFM;
+                end else if (q_route_load) begin
+                    q_state <= S_ROUTE_LOAD;
+                    if (q_route_load_swap) begin 
+                        q_fm_buf_switch <= 1;
+                    end
                 end else begin 
                     q_c_ctrl_start <= 1'b1;
                     q_state <= S_WAIT_CNN_CTRL;
                 end
             end
 
+            S_LOAD_IFM: begin
+                if (dma_ifm_load_done) begin
+                    q_state        <= S_WAIT_CNN_CTRL;
+                    q_c_ctrl_start <= 1'b1;
+                end
+            end     
 
             S_SAVE_OFM: begin 
                 if (dma_ofm_write_done) begin 
@@ -651,9 +683,17 @@ always @(posedge clk or negedge rstn) begin
                         ap_start <= 0;
                     end else begin 
                         q_layer <= q_layer + 1;
-                        // q_fm_buf_switch <= 1;
                         q_state <= S_LOAD_CFG1;     
                     end
+                end
+            end
+
+            S_ROUTE_LOAD: begin 
+                rte_buf_load_req <= 1;
+                if (rte_buf_load_done) begin 
+                    q_layer <= q_layer + 1;
+                    q_state <= S_LOAD_CFG1;
+                    rte_buf_load_req <= 0;
                 end
             end
 
@@ -682,18 +722,18 @@ end
 // 4) DMA signals
 //================================================================
 // 우리가 사용할 선들
-wire                 dma_rd_go;                 // read stream start (1cycle)
-wire [31:0]          dma_rd_base_addr;
-wire [BIT_TRANS-1:0] dma_rd_num_trans;
-wire [15:0]          dma_rd_max_req_blk_idx;
-wire                 dma_ctrl_read_done;        // read stream done (1cycle)
+wire                    dma_rd_go;                 // read stream start (1cycle)
+wire [31:0]             dma_rd_base_addr;
+wire [BIT_TRANS-1:0]    dma_rd_num_trans;
+wire [15:0]             dma_rd_max_req_blk_idx;
+wire                    dma_ctrl_read_done;        // read stream done (1cycle)
 
 
-wire                 dma_wr_go;
-wire [31:0]          dma_wr_base_addr;
-wire [BIT_TRANS-1:0] dma_wr_num_trans;
-wire [15:0]          dma_wr_max_req_blk_idx;
-wire                 dma_ctrl_write_done;
+wire                    dma_wr_go;
+wire [31:0]             dma_wr_base_addr;
+wire [BIT_TRANS-1:0]    dma_wr_num_trans;
+wire [15:0]             dma_wr_max_req_blk_idx;
+wire                    dma_ctrl_write_done;
 
 // 연결선
 // Signals for dma read  
@@ -784,7 +824,8 @@ reg  in_load_affine_phase;  // 0 -> bias, 1 -> scale
 // 즉 dma load fsm에서 DMA_LOAD_WAIT가 끝나고 DMA_LOAD_IDLE로 전이했을 떄 여전히 in_load_*_stage가
 // 활성화되어있을 수 있음. 이때 kicked 레지스터로 해당 load가 발행되었는지를 추적해야함.
 // kicked 레지스터는 state가 변경된 경우 적절히 다시 0이 될 필요가 있음. 
-reg  dma_load_kicked;
+// reg  dma_load_kicked;
+reg  dma_kicked_ifm, dma_kicked_filter, dma_kicked_bias, dma_kicked_scale, dma_kicked_affine;
 
 
 // a. dma_rd_go
@@ -804,7 +845,7 @@ reg [31:0]          dma_scale_rd_base_addr;
 
 // d. dma_rd_max_req_blk_idx
 // total bytes / 64B
-reg [15:0]          dma_rd_max_req_blk_idx_r; 
+reg [15:0]                  dma_rd_max_req_blk_idx_r; 
 
 
 
@@ -833,7 +874,7 @@ assign dma_rd_num_trans        = num_trans;
 assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
 
 
-// 전체 바이트 
+// bytes
 // item   : formula                         = formula optimize      => # blocks optimized
 //-------------------------------------------------------------------------------------------
 // ifm    : q_frame_size * 4                = q_frame_size << 2     => q_frame_size >> 4        
@@ -841,14 +882,11 @@ assign dma_rd_max_req_blk_idx = dma_rd_max_req_blk_idx_r;
 // bias   : (q_channel_out << 2) * 4        = (q_channel_out << 4)  => (q_channel_out >> 2)     // output 채널 / 16
 // scale  : (q_channel_out << 2) * 4        = (q_channel_out << 4)  => (q_channel_out >> 2)   
 
-// 블록단위로 안떨어지는 경우..
-// 그냥 zero padding
 
 // reg  [31:0] dma_load_bytes_total;  
 
 // 블록 수 = 전체 바이트 / 64 (>> 6)
 
-// 읽어야할 데이터가 64B의 배수가 아닐 때 -> 우선 계산 진행.
 reg rd_inflight;
 
 always @(posedge clk or negedge rstn) begin
@@ -868,8 +906,15 @@ always @(posedge clk or negedge rstn) begin
         dma_load_cur_sel         <= SEL_NONE;
         in_load_affine_phase     <= 0;
 
-        dma_load_kicked          <= 1'b0;
-        dma_load_rd_go_pulse     <= 1'b0;
+        // dma_load_kicked          <= 1'b0;
+        
+        dma_kicked_ifm          <= 0;
+        dma_kicked_filter       <= 0;
+        dma_kicked_bias         <= 0;
+        dma_kicked_scale        <= 0;
+        dma_kicked_affine       <= 0;
+
+        dma_load_rd_go_pulse    <= 1'b0;
 
 
         dma_ifm_load_done_reg    <= 0;
@@ -886,14 +931,15 @@ always @(posedge clk or negedge rstn) begin
         dma_scale_load_done_reg  <= 0;  
 
         // dma drain
-        // if ((in_load_ifm_leave && (dma_load_cur_sel==SEL_IFM)) ||
-        //     (in_load_filter_leave && (dma_load_cur_sel==SEL_FILTER)) ||
-        //     (in_load_affine_leave && ((dma_load_cur_sel==SEL_BIAS)||(dma_load_cur_sel==SEL_SCALE)))) begin
-        //     dma_load_state       <= DMA_LOAD_IDLE;
-        //     dma_load_cur_sel     <= SEL_NONE;
-        //     dma_load_kicked      <= 1'b0;
-        //     in_load_affine_phase <= 0;
-        // end
+        if (in_load_ifm_leave)    dma_kicked_ifm    <= 1'b0;
+        if (in_load_filter_leave) dma_kicked_filter <= 1'b0;
+        if (in_load_affine_leave) begin
+            dma_kicked_bias  <= 1'b0;
+            dma_kicked_scale <= 1'b0;
+            dma_kicked_affine <= 1'b0;
+        end
+
+
 
         case (dma_load_state)
             // ------------------------------------------------
@@ -901,15 +947,15 @@ always @(posedge clk or negedge rstn) begin
                 // dma_load_cur_sel <= SEL_NONE;
 
                 // 발행 한적 없을 때
-                if (!dma_load_kicked && in_load_ifm_enter && !dma_rd_plane_busy) begin
+                if (!dma_kicked_ifm && in_load_ifm_stage && !dma_rd_plane_busy) begin
                     dma_load_cur_sel <= SEL_IFM;
                     dma_load_state   <= DMA_LOAD_SETUP;
                 end
-                else if (!dma_load_kicked && in_load_filter_enter && !dma_rd_plane_busy) begin
+                else if (!dma_kicked_filter & in_load_filter_stage && !dma_rd_plane_busy) begin
                     dma_load_cur_sel <= SEL_FILTER;
                     dma_load_state   <= DMA_LOAD_SETUP;
                 end
-                else if (!dma_load_kicked && in_load_affine_enter && !dma_rd_plane_busy) begin
+                else if (!dma_kicked_affine && in_load_affine_stage && !dma_rd_plane_busy) begin
                     dma_load_cur_sel <= SEL_BIAS;
                     dma_load_state   <= DMA_LOAD_SETUP;
                 end
@@ -945,10 +991,33 @@ always @(posedge clk or negedge rstn) begin
             // ------------------------------------------------
             // Fire a single‑cycle start to DMA controller
             DMA_LOAD_KICK: begin
-                if (!dma_load_kicked) begin
-                    dma_load_rd_go_pulse <= 1'b1; // one-cycle kick
-                    dma_load_kicked  <= 1'b1;
-                end
+                case (dma_load_cur_sel)
+                    SEL_IFM: begin
+                        dma_kicked_ifm <= 1;
+                        dma_load_rd_go_pulse <= 1;
+                    end
+                    SEL_FILTER: begin
+                        dma_kicked_filter <= 1;
+                        dma_load_rd_go_pulse <= 1;
+                    end
+                    SEL_BIAS: begin
+                        dma_kicked_affine <= 1;
+                        dma_kicked_bias <= 1;
+                        dma_load_rd_go_pulse <= 1;
+                    end
+                    SEL_SCALE: begin
+                        dma_kicked_scale <= 1;
+                        dma_load_rd_go_pulse <= 1;
+                    end
+                    default: begin
+                        dma_rd_max_req_blk_idx_r <= 16'd0;
+                    end
+                endcase
+
+                // if (!dma_load_kicked) begin
+                //     dma_load_rd_go_pulse <= 1'b1; // one-cycle kick
+                //     dma_load_kicked  <= 1'b1;
+                // end
                 dma_load_state <= DMA_LOAD_WAIT;
             end
             // ------------------------------------------------
@@ -958,32 +1027,40 @@ always @(posedge clk or negedge rstn) begin
                     case (dma_load_cur_sel)
                         SEL_IFM: begin
                             dma_load_state        <= DMA_LOAD_IDLE;
-                            dma_load_kicked       <= 1'b0;
+                            // dma_load_kicked       <= 1'b0;
                             q_load_ifm            <= 1'b0;
                             dma_ifm_load_done_reg <= 1'b1;
+                            // dma_kicked_ifm        <= 1'b0;
                         end
                         SEL_FILTER: begin 
                             dma_load_state           <= DMA_LOAD_IDLE;
-                            dma_load_kicked          <= 1'b0;
+                            // dma_load_kicked          <= 1'b0;
                             q_load_filter            <= 1'b0;
                             dma_filter_load_done_reg <= 1'b1;
+
+                            // dma_kicked_filter        <= 1'b0;
 
                             dma_filter_rd_base_addr  <= dma_filter_rd_base_addr + (q_channel << 4) * 9;
                         end
                         SEL_BIAS: begin 
                             dma_load_state         <= DMA_LOAD_SETUP;
                             dma_load_cur_sel       <= SEL_SCALE;
-                            dma_load_kicked        <= 1'b0;
+                            // dma_load_kicked        <= 1'b0;
                             q_load_bias            <= 1'b0;
                             dma_bias_load_done_reg <= 1'b1;
+
+                            // dma_kicked_bias        <= 1'b0;
 
                             dma_bias_rd_base_addr  <= dma_bias_rd_base_addr + (q_channel_out << 4);
                         end
                         SEL_SCALE: begin
                             dma_load_state          <= DMA_LOAD_IDLE;
                             q_load_scale            <= 1'b0;
-                            dma_load_kicked         <= 1'b0;
+                            // dma_load_kicked         <= 1'b0;
                             dma_scale_load_done_reg <= 1'b1;
+
+                            // dma_kicked_scale        <= 1'b0;
+                            // dma_kicked_ifm          <= 1'b0;
 
                             in_load_affine_phase    <= 1'b0;
                             dma_scale_rd_base_addr  <= dma_scale_rd_base_addr + (q_channel_out << 4);
@@ -1183,6 +1260,8 @@ always @(posedge clk or negedge rstn) begin
                     
                     dma_wr_max_req_blk_idx_r <= 0;
                     dma_wr_blk_idx           <= 0;
+
+                    dram_base_addr_ofm       <= dram_base_addr_ofm + (q_frame_size<<2);
                 end
             end
         endcase
@@ -1335,9 +1414,8 @@ u_dma_write(
 );
 
 //--------------------------------------------------------------------
-// 
+// wire for submodule
 //--------------------------------------------------------------------
-// 연결선
 
 // BM read tap
 wire                        tap_ifm_vld;
@@ -1345,18 +1423,17 @@ wire                        tap_ifm_read_vld;
 wire [IFM_AW-1:0]           tap_ifm_read_addr;
 wire [IFM_DW-1:0]           tap_ifm_read_data;
 
-// BM route aux port
-wire                        rte_ifm_vld;
-wire                        rte_ifm_write_vld;
-wire [IFM_AW-1:0]           rte_ifm_write_addr;
-wire [IFM_DW-1:0]           rte_ifm_write_data;
 
-
-// rte ports (when route load)  FIXME
-wire                        rte_buf_load_vld;
-wire [RTE_AW-1:0]           rte_buf_load_addr;
-wire [FM_DW-1:0]            rte_buf_load_data;
+// rte ports (when route load)
+// rte control signal
+reg                         rte_buf_load_req;
 wire                        rte_buf_load_done; 
+
+wire                        rte_aux_vld;
+wire                        rte_aux_write_vld;
+wire [IFM_AW-1:0]           rte_aux_write_addr;
+wire [IFM_DW-1:0]           rte_aux_write_data;
+
 
 // BM <-> PE (IFM/FILTER)
 wire [IFM_DW-1:0]           ifm_data_0, ifm_data_1, ifm_data_2;
@@ -1425,39 +1502,39 @@ wire  [OFM_AW-1:0]          mux_ofm_addr     = q_maxpool ? mp_addr     : pp_addr
 
 //---------------------------------------------------------------------- 
 cnn_ctrl u_cnn_ctrl (
-    .clk               (clk                 ),
-    .rstn              (rstn                ),
+    .clk                (clk                ),
+    .rstn               (rstn               ),
     // Inputs
-    .q_width           (q_width             ),
-    .q_height          (q_height            ),
-    .q_channel         (q_channel           ),
-    .q_channel_out     (q_channel_out       ),
-    .q_frame_size      (q_frame_size        ),
-    .q_start           (q_c_ctrl_start      ),
+    .q_width            (q_width            ),
+    .q_height           (q_height           ),
+    .q_channel          (q_channel          ),
+    .q_channel_out      (q_channel_out      ),
+    .q_frame_size       (q_frame_size       ),
+    .q_start            (q_c_ctrl_start     ),
     
-    .bm_csync_done     (bm_csync_done       ),
-    .pe_csync_done     (pe_csync_done       ),
+    .bm_csync_done      (bm_csync_done      ),
+    .pe_csync_done      (pe_csync_done      ),
 
-    .pp_load_done      (pp_load_done        ),
-    .ofm_sync_done     (bm_ofm_sync_done    ),
+    .pp_load_done       (pp_load_done       ),
+    .ofm_sync_done      (bm_ofm_sync_done   ),
     
     // Outputs
-    .o_ctrl_csync_run  (ctrl_csync_run      ),
-    .o_ctrl_psync_run  (ctrl_psync_run      ),
-    .o_ctrl_data_run   (ctrl_data_run       ),
-    .o_ctrl_psync_phase(ctrl_psync_phase    ),
-    .o_is_first_row    (is_first_row        ),
-    .o_is_last_row     (is_last_row         ),
-    .o_is_first_col    (is_first_col        ),
-    .o_is_last_col     (is_last_col         ),
-    .o_is_first_chn    (is_first_chn        ),
-    .o_is_last_chn     (is_last_chn         ),
-    .o_row             (row                 ),
-    .o_col             (col                 ),
-    .o_chn             (chn                 ),
-    .o_chn_out         (chn_out             ),
-    .o_fb_load_req     (fb_load_req         ),
-    .o_layer_done      (layer_done          )
+    .o_ctrl_csync_run   (ctrl_csync_run     ),
+    .o_ctrl_psync_run   (ctrl_psync_run     ),
+    .o_ctrl_data_run    (ctrl_data_run      ),
+    .o_ctrl_psync_phase (ctrl_psync_phase   ),
+    .o_is_first_row     (is_first_row       ),
+    .o_is_last_row      (is_last_row        ),
+    .o_is_first_col     (is_first_col       ),
+    .o_is_last_col      (is_last_col        ),
+    .o_is_first_chn     (is_first_chn       ),
+    .o_is_last_chn      (is_last_chn        ),
+    .o_row              (row                ),
+    .o_col              (col                ),
+    .o_chn              (chn                ),
+    .o_chn_out          (chn_out            ),
+    .o_fb_load_req      (fb_load_req        ),
+    .o_layer_done       (layer_done         )
 );
 //---------------------------------------------------------------------- 
 buffer_manager u_buffer_manager (
@@ -1487,13 +1564,10 @@ buffer_manager u_buffer_manager (
     .tap_ifm_read_data  (tap_ifm_read_data  ),
 
     // aux port for route load (route buffer -> ifm buffer)
-    // two functionality
-    // 1. when route save -> pp result directly saved in buf destination
-    // 2. when route load -> route buf data (FIXME: need to implement)
-    .rte_ifm_vld        (rte_ifm_vld        ),   // must be separated from the area being calculated
-    .rte_ifm_write_vld  (rte_ifm_write_vld  ),
-    .rte_ifm_write_addr (rte_ifm_write_addr ),
-    .rte_ifm_write_data (rte_ifm_write_data ),
+    .aux_ifm_vld        (rte_aux_vld        ),   // must be separated from the area being calculated
+    .aux_ifm_write_vld  (rte_aux_write_vld  ),
+    .aux_ifm_write_addr (rte_aux_write_addr ),
+    .aux_ifm_write_data (rte_aux_write_data ),
 
     // Buffer Manager <-> AXI (IFM/FILTER)
     .read_data          (axi_read_data      ),
@@ -1656,6 +1730,7 @@ route_buffer u_route_buffer (
     .rstn               (rstn               ),
 
     // top
+    .q_frame_size       (q_frame_size       ),
     .q_route_save       (q_route_save       ),
     .q_route_load       (q_route_load       ),
     .q_route_loc        (q_route_loc        ),
@@ -1666,17 +1741,15 @@ route_buffer u_route_buffer (
     .pp_data            (pp_data            ),
     .pp_addr            (pp_addr            ),
 
-    // buffer manager
-    .rte_ifm_vld        (rte_ifm_vld        ),
-    .rte_ifm_write_vld  (rte_ifm_write_vld  ),
-    .rte_ifm_write_addr (rte_ifm_write_addr ),
-    .rte_ifm_write_data (rte_ifm_write_data ),
+    // routing logic
+    .rte_buf_load_req   (rte_buf_load_req   ),
+    .rte_buf_load_done  (rte_buf_load_done  ),  // rte load done
 
-    // route load
-    .rte_buf_load_vld   (rte_buf_load_vld   ),  // input
-    .rte_buf_load_addr  (rte_buf_load_addr  ),  // output
-    .rte_buf_load_data  (rte_buf_load_data  ),  // output
-    .rte_buf_load_done  (rte_buf_load_done  )   // output
+    // buffer manager
+    .rte_aux_vld        (rte_aux_vld        ),
+    .rte_aux_write_vld  (rte_aux_write_vld  ),
+    .rte_aux_write_addr (rte_aux_write_addr ),
+    .rte_aux_write_data (rte_aux_write_data )
 );
 
 endmodule
