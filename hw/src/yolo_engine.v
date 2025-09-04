@@ -428,6 +428,7 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         5'd0: dbg_layer_entry = {
                 fit_1bit(`TEST_L0_LAST_LAYER),      // last_layer
                 fit_1bit(`TEST_L0_OFM_SAVE),        // ofm_save
+                fit_wch(`TEST_L0_ROUTE_CHN_OFFSET), // route_chn_offset
                 fit_aw(`TEST_L0_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L0_ROUTE_LOC),       // route_loc
                 fit_1bit(`TEST_L0_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
@@ -444,6 +445,7 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         5'd1: dbg_layer_entry = {
                 fit_1bit(`TEST_L1_LAST_LAYER),      // last_layer
                 fit_1bit(`TEST_L1_OFM_SAVE),        // ofm_save
+                fit_wch(`TEST_L1_ROUTE_CHN_OFFSET), // route_chn_offset
                 fit_aw(`TEST_L1_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L1_ROUTE_LOC),       // route_loc
                 fit_1bit(`TEST_L1_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
@@ -460,6 +462,7 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         5'd2: dbg_layer_entry = {
                 fit_1bit(`TEST_L2_LAST_LAYER),      // last_layer
                 fit_1bit(`TEST_L2_OFM_SAVE),        // ofm_save
+                fit_wch(`TEST_L2_ROUTE_CHN_OFFSET), // route_chn_offset
                 fit_aw(`TEST_L2_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L2_ROUTE_LOC),       // route_loc
                 fit_1bit(`TEST_L2_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
@@ -476,6 +479,7 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         5'd3: dbg_layer_entry = {
                 fit_1bit(`TEST_L3_LAST_LAYER),      // last_layer
                 fit_1bit(`TEST_L3_OFM_SAVE),        // ofm_save
+                fit_wch(`TEST_L3_ROUTE_CHN_OFFSET), // route_chn_offset
                 fit_aw(`TEST_L3_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L3_ROUTE_LOC),       // route_loc
                 fit_1bit(`TEST_L3_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
@@ -492,6 +496,7 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         5'd4: dbg_layer_entry = {
                 fit_1bit(`TEST_L4_LAST_LAYER),      // last_layer
                 fit_1bit(`TEST_L4_OFM_SAVE),        // ofm_save
+                fit_wch(`TEST_L4_ROUTE_CHN_OFFSET), // route_chn_offset
                 fit_aw(`TEST_L4_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L4_ROUTE_LOC),       // route_loc
                 fit_1bit(`TEST_L4_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
@@ -508,6 +513,7 @@ function [W_ENTRY-1:0] dbg_layer_entry;
         5'd5: dbg_layer_entry = {
                 fit_1bit(`TEST_L5_LAST_LAYER),      // last_layer
                 fit_1bit(`TEST_L5_OFM_SAVE),        // ofm_save
+                fit_wch(`TEST_L5_ROUTE_CHN_OFFSET), // route_chn_offset
                 fit_aw(`TEST_L5_ROUTE_OFFSET),      // route_offset
                 fit_2bit(`TEST_L5_ROUTE_LOC),       // route_loc
                 fit_1bit(`TEST_L5_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
@@ -642,9 +648,9 @@ always @(posedge clk or negedge rstn) begin
         rte_buf_load_req <= 0;
     end
     else begin
-        q_c_ctrl_start <= 0; // pulse
+        q_c_ctrl_start <= 0;  // pulse
         q_fm_buf_switch <= 0; // pulse
-        q_as_start <= 0 // pulse
+        q_as_start <= 0;      // pulse
 
         case (q_state)
             S_IDLE: begin
@@ -725,11 +731,14 @@ always @(posedge clk or negedge rstn) begin
             S_ROUTE_LOAD: begin 
                 // rte_buf_load_req <= 1;
                 if (q_route_loc == 0 && as_done) begin 
+                    // ifm
                     q_layer <= q_layer + 1;
                     q_state <= S_LOAD_CFG1;
+                    q_fm_buf_switch <= 1; // ...
                 end
 
                 if (q_route_loc == 1 && rte_buf_load_done) begin 
+                    // rte buf
                     q_layer <= q_layer + 1;
                     q_state <= S_LOAD_CFG1;
                     rte_buf_load_req <= 0;
@@ -748,6 +757,13 @@ always @(posedge clk or negedge rstn) begin
                         q_fm_buf_switch <= 1;
                         q_state <= S_LOAD_CFG1;
                     end
+                end
+            end
+
+            S_WAIT_UPSAMPLE: begin 
+                if (as_done) begin 
+                    q_layer <= q_layer + 1;
+                    q_state <= S_LOAD_CFG1;
                 end
             end
 
@@ -1262,7 +1278,7 @@ wire [IFM_AW-1:0]               dma_tap_ifm_read_addr = (dma_wr_blk_idx << 4) + 
 // assign tap_ifm_vld          = in_save_ofm_stage;
 // assign tap_ifm_read_vld     = indata_req_wr;
 // assign tap_ifm_read_addr    = (dma_wr_blk_idx << 4) + write_data_cnt;
-assign write_data           = tap_ifm_read_data;
+assign write_data           =  in_save_ofm_stage ? tap_ifm_read_data : 0;
 
 
 // -----------------------------------------------------------------------------
@@ -1470,14 +1486,17 @@ wire [IFM_DW-1:0]           tap_ifm_read_data;
 // mux for tap port
 assign tap_ifm_vld       = in_save_ofm_stage       ? dma_tap_ifm_vld
                          : in_route_load_ifm_stage ? 1                // route load from ifm
+                         : q_upsample              ? 1
                          : 0;    
 
 assign tap_ifm_read_vld  = in_save_ofm_stage       ? dma_tap_ifm_read_vld
                          : in_route_load_ifm_stage ? as_rd_vld
+                         : q_upsample              ? as_rd_vld
                          : 0;
 
 assign tap_ifm_read_addr = in_save_ofm_stage       ? dma_tap_ifm_read_addr
                          : in_route_load_ifm_stage ? as_rd_addr
+                         : q_upsample              ? as_rd_addr
                          : 0;
 
 
@@ -1566,14 +1585,17 @@ wire [OFM_AW-1:0]           as_wr_addr; // go to ofm mux
 // ofm mux
 wire                        mux_ofm_data_vld = q_maxpool               ? mp_data_vld 
                                              : in_route_load_ifm_stage ? as_wr_vld
-                                             :  pp_data_vld;
+                                             : q_upsample              ? as_wr_vld
+                                             : pp_data_vld;
 
 wire  [OFM_DW-1:0]          mux_ofm_data     = q_maxpool               ? mp_data     
-                                             : in_route_load_ifm_stage ? tap_ifm_read_data 
+                                             : in_route_load_ifm_stage ? tap_ifm_read_data
+                                             : q_upsample              ? tap_ifm_read_data 
                                              : pp_data;
 
 wire  [OFM_AW-1:0]          mux_ofm_addr     = q_maxpool               ? mp_addr     
                                              : in_route_load_ifm_stage ? as_wr_addr
+                                             : q_upsample              ? as_wr_addr
                                              : pp_addr;
 //---------------------------------------------------------------------- 
 cnn_ctrl u_cnn_ctrl (
