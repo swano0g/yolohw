@@ -9,107 +9,68 @@
 //----------------------------------------------------------------+
 `timescale 1ns/1ps
 
-module axi_dma_wr(
-    //AXI Master Interface
-    //Write address channel
-    M_AWVALID,    // address/control valid handshake
-    M_AWADDR,     // Address Write
-    M_AWREADY,
-    M_AWID,       // Address ID
-    M_AWLEN,      // Transfer length
-    M_AWSIZE,     // Transfer width
-    M_AWBURST,    // Burst type
-    M_AWLOCK,     // Atomic access information
-    M_AWCACHE,    // Cachable/bufferable infor
-    M_AWPROT,     // Protection info
-    M_AWQOS,
-    M_AWREGION,
-    M_AWUSER,
-
-    //Write data channel
-    M_WVALID,     // Write data valid
-    M_WREADY,     // Write data ready
-    M_WDATA,      // Write Data bus
-    M_WSTRB,      // Write Data byte lane strobes
-    M_WLAST,      // Last beat of a burst transfer
-    M_WID,        // Write ID
-    M_WUSER,
-
-    //Write response channel
-    M_BVALID,     // Response info valid
-    M_BREADY,     // Response info ready (to slave)
-    M_BRESP,      // Buffered write response
-    M_BID,        // buffered response ID
-    M_BUSER,
-
-    //User interface
-    start_dma,		
-    done_o,			
-    num_trans,
-    start_addr,
-    //buff_start_addr,
-    indata,
-    indata_req_o,
-    //buff_valid,
-    fail_check,
-    //User signals
-    clk, 
-    rstn
-);
+module axi_dma_wr #(
 	// Parameters
-	parameter BITS_TRANS = 18;
-	parameter OUT_BITS_TRANS = 13;
+	parameter BITS_TRANS     = 18,
+	parameter OUT_BITS_TRANS = 13,
 
-	parameter AXI_WIDTH_USER = 1;              // Master ID
-	parameter AXI_WIDTH_ID   = 4;              // ID width in bits
-	parameter AXI_WIDTH_AD   = 32;             // address width
-	parameter AXI_WIDTH_DA   = 32;            // data width
-	parameter AXI_WIDTH_DS = (AXI_WIDTH_DA/8); // data strobe width
-    //AXI Master Interface
-    //Write address channel
-    output                     M_AWVALID;   // address/control valid handshake
-    input                      M_AWREADY;
-    output [AXI_WIDTH_AD-1:0]  M_AWADDR;    // Address Write
-    output [AXI_WIDTH_ID-1:0]  M_AWID;      // Address ID
-    output [7:0]               M_AWLEN;     // Transfer length
-    output [2:0]               M_AWSIZE;    // Transfer width
-    output [1:0]               M_AWBURST;   // Burst type
-    output [1:0]               M_AWLOCK;    // Atomic access information
-    output [3:0]               M_AWCACHE;   // Cachable/bufferable infor
-    output [2:0]               M_AWPROT;    // Protection info
-    output [3:0]               M_AWQOS;
-    output [3:0]               M_AWREGION;
-    output [3:0]               M_AWUSER;
-                               
-    //Write data channel       
-    output                     M_WVALID;    // Write data valid
-    input                      M_WREADY;    // Write data ready
-    output [AXI_WIDTH_DA-1:0]  M_WDATA;     // Write Data bus
-    output [AXI_WIDTH_DS-1:0]  M_WSTRB;     // Write Data byte lane strobes
-    output                     M_WLAST;     // Last beat of a burst transfer
-    output [AXI_WIDTH_ID-1:0]  M_WID;       // Write ID
-    output [3:0]               M_WUSER;
+	parameter AXI_WIDTH_USER = 1,                // Master ID
+	parameter AXI_WIDTH_ID   = 4,                // ID width in bits
+	parameter AXI_WIDTH_AD   = 32,               // address width
+	parameter AXI_WIDTH_DA   = 32,               // data width
+	parameter AXI_WIDTH_DS   = (AXI_WIDTH_DA/8)  // data strobe width
+)(
+   //AXI Master Interface
+   //Write address channel
+   output                     M_AWVALID,   // address/control valid handshake
+   input                      M_AWREADY,
+   output [AXI_WIDTH_AD-1:0]  M_AWADDR,    // Address Write
+   output [AXI_WIDTH_ID-1:0]  M_AWID,      // Address ID
+   output [7:0]               M_AWLEN,     // Transfer length
+   output [2:0]               M_AWSIZE,    // Transfer width
+   output [1:0]               M_AWBURST,   // Burst type
+   output [1:0]               M_AWLOCK,    // Atomic access information
+   output [3:0]               M_AWCACHE,   // Cachable/bufferable infor
+   output [2:0]               M_AWPROT,    // Protection info
+   output [3:0]               M_AWQOS,
+   output [3:0]               M_AWREGION,
+   output [3:0]               M_AWUSER,
 
-    //Write response channel
-    input                       M_BVALID;    // Response info valid
-    output                      M_BREADY;    // Response info ready (to slave)
-    input [1:0]                 M_BRESP;     // Buffered write response
-    input [AXI_WIDTH_ID-1:0]    M_BID;       // buffered response ID
-    input                       M_BUSER;
+   //Write data channel       
+   output                     M_WVALID,    // Write data valid
+   input                      M_WREADY,    // Write data ready
+   output [AXI_WIDTH_DA-1:0]  M_WDATA,     // Write Data bus
+   output [AXI_WIDTH_DS-1:0]  M_WSTRB,     // Write Data byte lane strobes
+   output                     M_WLAST,     // Last beat of a burst transfer
+   output [AXI_WIDTH_ID-1:0]  M_WID,       // Write ID
+   output [3:0]               M_WUSER,
 
-    //User interface
-    input                       start_dma;
-    output reg                  done_o;
-    input [OUT_BITS_TRANS-1:0]  num_trans;
-    input [AXI_WIDTH_DA-1:0]    start_addr;
-    input [AXI_WIDTH_DA-1:0]    indata;
-    output reg                  indata_req_o;
-    //input [MAX_BUFF_W-1:0]      buff_start_addr;
-    //input           buff_valid;
-    output reg      fail_check;	// For debugging
-    //User signals
-    input clk;
-    input rstn;
+   //Write response channel
+   input                      M_BVALID,    // Response info valid
+   output                     M_BREADY,    // Response info ready (to slave)
+   input [1:0]                M_BRESP,     // Buffered write response
+   input [AXI_WIDTH_ID-1:0]   M_BID,       // buffered response ID
+   input                      M_BUSER,
+
+   // dma ctlr
+   input                      start_dma,   // from dma ctrl
+   input [OUT_BITS_TRANS-1:0] num_trans,   
+   output reg                 done_o,      // to dma ctrl (trans done)
+   input [AXI_WIDTH_AD-1:0]   start_addr,  // from dma ctrl
+
+   // User interface
+   input [AXI_WIDTH_DA-1:0]   indata,     
+   output reg                 indata_req_o,
+
+
+   //input [MAX_BUFF_W-1:0]      buff_start_addr,
+   //input                       buff_valid,
+   output reg                 fail_check,	// For debugging
+   //User signals
+   input                      clk,
+   input                      rstn
+);
+
 //---------------------------------------------------------------------
 // parameter definitions 
 //---------------------------------------------------------------------
@@ -133,21 +94,21 @@ module axi_dma_wr(
 //---------------------------------------------------------------------
 // Internal signals 
 //---------------------------------------------------------------------
-  reg  [AXI_WIDTH_AD-1:0] ext_awaddr ;
-  reg  [7:0]              ext_awlen  ;
-  reg  [2:0]              ext_awsize ;
-  reg                     ext_awvalid;
-  wire                    ext_awready;
-  reg  [AXI_WIDTH_DA-1:0] ext_wdata  ;
-  reg  [AXI_WIDTH_DS-1:0] ext_wstrb  ;
-  reg                  ext_wlast  ;
-  reg                  ext_wvalid ;
-  wire                 ext_wready ;
-  wire [AXI_WIDTH_ID-1:0]    ext_bid;
-  wire [1:0]           ext_bresp  ;
-  wire                 ext_bvalid ;
-  reg                  ext_bready ;
-//reg  [1:0]                 ext_awburst;
+   reg  [AXI_WIDTH_AD-1:0] ext_awaddr;
+   reg  [7:0]              ext_awlen;
+   reg  [2:0]              ext_awsize;
+   reg                     ext_awvalid;
+   wire                    ext_awready;
+   reg  [AXI_WIDTH_DA-1:0] ext_wdata;
+   reg  [AXI_WIDTH_DS-1:0] ext_wstrb;
+   reg                     ext_wlast;
+   reg                     ext_wvalid;
+   wire                    ext_wready;
+   wire [AXI_WIDTH_ID-1:0] ext_bid;
+   wire [1:0]              ext_bresp;
+   wire                    ext_bvalid;
+   reg                     ext_bready;
+// reg  [1:0]                 ext_awburst;
 
    assign M_AWID = DEFAULT_ID;
    assign M_WID = DEFAULT_ID;

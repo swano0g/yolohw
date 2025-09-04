@@ -215,3 +215,87 @@ def maxpool_from_affine_words(
                     acc = 0
 
     return out_words
+
+
+
+def upsample_words(
+    words: list[str],
+    H: int, W: int, M: int,
+    sy: int = 2, sx: int = 2
+) -> list[str]:
+
+    words_per_pix = M // 4
+    expected_words = H * W * words_per_pix
+
+
+    # 1) 32b hex -> uint32 배열
+    def _to_u32(s: str) -> int:
+        s = s.lower().replace("0x", "")
+        return int(s, 16) & 0xFFFFFFFF
+
+    u32 = np.fromiter(( _to_u32(s) for s in words ), dtype=np.uint32, count=expected_words)
+
+    # 2) 32b -> 4바이트 분해 (little-endian: c0=LSB)
+    #    shape: (Nwords, 4) → (H, W, M)
+    b0 = (u32      & 0xFF).astype(np.uint8)   # c0
+    b1 = ((u32>>8) & 0xFF).astype(np.uint8)   # c1
+    b2 = ((u32>>16)& 0xFF).astype(np.uint8)   # c2
+    b3 = ((u32>>24)& 0xFF).astype(np.uint8)   # c3
+    bytes4 = np.stack([b0, b1, b2, b3], axis=1)              # (Nwords, 4)
+    ofm = bytes4.reshape(H, W, words_per_pix, 4).reshape(H, W, M)  # (H, W, M)
+
+    # 3) 최근접 업샘플 (row/col 방향 반복)
+    ofm_up = np.repeat(np.repeat(ofm, sy, axis=0), sx, axis=1)     # (H*sy, W*sx, M)
+    H2, W2 = H * sy, W * sx
+
+    # 4) 4채널씩 다시 패킹하여 32b로 합치기
+    g = ofm_up.reshape(H2, W2, words_per_pix, 4).astype(np.uint32) # (H2, W2, M/4, 4)
+    u32_out = (g[...,0] | (g[...,1]<<8) | (g[...,2]<<16) | (g[...,3]<<24)).reshape(-1)
+
+    # 5) 8자리 소문자 hex 문자열로 출력
+    out_words = [f"{int(v):08x}" for v in u32_out.tolist()]
+    return out_words
+
+
+
+def concat_words(
+    words1: list[str],
+    words2: list[str],
+    H: int, W: int, M1: int, M2: int
+) -> list[str]:
+
+    words_per_pix1 = M1 // 4
+    words_per_pix2 = M2 // 4
+    expected1 = H * W * words_per_pix1
+    expected2 = H * W * words_per_pix2
+    assert len(words1) == expected1
+    assert len(words2) == expected2
+
+    def _to_u32(s: str) -> int:
+        return int(s, 16) & 0xFFFFFFFF
+
+    arr1 = np.fromiter((_to_u32(s) for s in words1), dtype=np.uint32, count=expected1)
+    arr2 = np.fromiter((_to_u32(s) for s in words2), dtype=np.uint32, count=expected2)
+
+    # 32b -> (H,W,M1) / (H,W,M2)
+    def unpack(u32arr, M):
+        b0 = (u32arr      & 0xFF).astype(np.uint8)
+        b1 = ((u32arr>>8) & 0xFF).astype(np.uint8)
+        b2 = ((u32arr>>16)& 0xFF).astype(np.uint8)
+        b3 = ((u32arr>>24)& 0xFF).astype(np.uint8)
+        bytes4 = np.stack([b0,b1,b2,b3], axis=1)
+        return bytes4.reshape(H, W, M//4, 4).reshape(H, W, M)
+
+    fmap1 = unpack(arr1, M1)
+    fmap2 = unpack(arr2, M2)
+
+    # 채널 축 concat
+    fmap_cat = np.concatenate([fmap1, fmap2], axis=2)  # (H,W,M1+M2)
+    M_out = M1+M2
+    words_per_pix_out = M_out//4
+
+    # 다시 패킹
+    g = fmap_cat.reshape(H, W, words_per_pix_out, 4).astype(np.uint32)
+    u32_out = (g[...,0] | (g[...,1]<<8) | (g[...,2]<<16) | (g[...,3]<<24)).reshape(-1)
+    out_words = [f"{int(v):08x}" for v in u32_out.tolist()]
+    return out_words
