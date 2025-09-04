@@ -75,7 +75,7 @@ reg	[DW-1			:	0]		rdata;
 				.doutb   (dob)
 			);
 	    end
-		// filter buffer (4.5KB)
+		// filter buffer (4KB)
         else if((DEPTH == 512) && (DW == 72)) begin: gen_dpram_512x72
 			dpram_512x72 u_dpram_512x72 (
 				// write ports
@@ -91,7 +91,7 @@ reg	[DW-1			:	0]		rdata;
 				.doutb   (dob)
 			);
 	    end
-		// affine buffer
+		// affine buffer (2KB)
 		else if((DEPTH == 512) && (DW == 32)) begin: gen_dpram_512x32
 			dpram_512x32 u_dpram_512x32 (
 				// write ports
@@ -107,7 +107,7 @@ reg	[DW-1			:	0]		rdata;
 				.doutb   (dob)
 			);
 	    end
-		// psum row buffer
+		// psum row buffer (1KB)
 		else if((DEPTH == 256) && (DW == 32)) begin: gen_dpram_256x32
 			dpram_256x32 u_dpram_256x32 (
 				// write ports
@@ -123,9 +123,24 @@ reg	[DW-1			:	0]		rdata;
 				.doutb   (dob)
 			);
 	    end
-		// maxpool buffer
+		// maxpool buffer (0.5KB)
 		else if((DEPTH == 128) && (DW == 32)) begin: gen_dpram_128x32
 			dpram_128x32 u_dpram_128x32 (
+				// write ports
+				.clka    (clk),
+				.ena     (ena),
+				.wea     (wea),
+				.addra   (addra),
+				.dina    (dia),
+				// read ports 
+				.clkb    (clk),
+				.enb     (enb),
+				.addrb   (addrb),
+				.doutb   (dob)
+			);
+	    end
+		else if((DEPTH == 4096) && (DW == 32)) begin: gen_dpram_4096x32
+			dpram_4096x32 u_dpram_4096x32 (
 				// write ports
 				.clka    (clk),
 				.ena     (ena),
