@@ -1,0 +1,52 @@
+DRAM memory image built
+offset
+ ifm    : 0
+ filter : 262144
+ bias   : 6068800
+ scale  : 6078016
+ total  : 6087232 bytes
+ total  : 1521808 lines
+[Layer 0]
+ width=256 height=256 cin=4 cout=16
+result shape = (16, 256, 256)
+[Layer 1]
+ width=128 height=128 cin=16 cout=32
+result shape = (32, 128, 128)
+[Layer 2]
+ width=64 height=64 cin=32 cout=64
+result shape = (64, 64, 64)
+[Layer 3]
+ width=32 height=32 cin=64 cout=128
+result shape = (128, 32, 32)
+[Layer 4]
+ width=16 height=16 cin=128 cout=256
+result shape = (256, 16, 16)
+[Layer 5]
+ width=8 height=8 cin=256 cout=512
+result shape = (512, 8, 8)
+[Layer 6]
+ width=8 height=8 cin=512 cout=256
+result shape = (256, 8, 8)
+[Layer 7]
+ width=8 height=8 cin=256 cout=512
+result shape = (512, 8, 8)
+[Layer 8]
+ width=8 height=8 cin=512 cout=196
+result shape = (196, 8, 8)
+[Layer 9]
+DRAM save layer
+[Layer 10]
+ROUTE layer
+[Layer 11]
+ width=8 height=8 cin=256 cout=128
+result shape = (128, 8, 8)
+[Layer 12]
+UPSAMPLE
+[Layer 13]
+CONCAT
+[Layer 14]
+ width=16 height=16 cin=384 cout=196
+result shape = (196, 16, 16)
+EXPECT info
+ total  : 62720 bytes
+ total  : 15680 lines
