@@ -46,12 +46,6 @@ module yolo_engine #(
 
     // parameter RTE_AW                = ROUTE_BUFFER_AW,
 
-    parameter TEST_COL              = 16,
-    parameter TEST_ROW              = 16, 
-    parameter TEST_T_CHNIN          = 4,
-    parameter TEST_T_CHNOUT         = 8,  
-    parameter TEST_FRAME_SIZE       = TEST_ROW * TEST_COL * TEST_T_CHNIN,
-
     parameter DRAM_FILTER_OFFSET    = 4096,
     parameter DRAM_BIAS_OFFSET      = DRAM_FILTER_OFFSET + 4608,
     parameter DRAM_SCALE_OFFSET     = DRAM_BIAS_OFFSET + 128 
@@ -118,6 +112,10 @@ module yolo_engine #(
 );
 
 localparam BIT_TRANS = 18;
+
+parameter   RTE_IFM  = 2'b00,
+            RTE_BUF  = 2'b01,
+            RTE_DRAM = 2'b10;   // not support
 
 //================================================================
 // 1) Parse control signals
@@ -309,108 +307,282 @@ localparam W_ENTRY = 1                  // q_last_layer         1
 
 
 // FIXME
+`include "yolo_layer_cfg.vh"
 function [W_ENTRY-1:0] layer_entry;
     input [4:0] q_layer;
     begin
         case (q_layer)
         5'd0: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                   // maxpool_stride
-                fit_row_stride(256),    // row_stride
-                fit_wframe(65536),      // frame_size
-                fit_wch(4),             // channel_out
-                fit_wch(1),             // channel (in)
-                fit_wsize(256),         // height
-                fit_wsize(256)          // width
+                fit_1bit(`L00_LAST_LAYER),      // last_layer
+                fit_1bit(`L00_OFM_SAVE),        // ofm_save
+                fit_wch(`L00_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L00_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L00_ROUTE_LOC),       // route_loc
+                fit_1bit(`L00_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L00_ROUTE_LOAD),      // route_load
+                fit_1bit(`L00_ROUTE_SAVE),      // route_save
+                fit_1bit(`L00_UPSAMPLE),        // upsample
+                fit_1bit(`L00_MAXPOOL),         // maxpool
+                fit_2bit(`L00_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L00_CHANNEL_OUT),      // channel_out
+                fit_wch(`L00_CHANNEL),          // channel (in)
+                fit_wsize(`L00_ROW),            // height
+                fit_wsize(`L00_COL)             // width
                 };
         5'd1: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                   // maxpool_stride
-                fit_row_stride(512),    // row_stride
-                fit_wframe(65536),      // frame_size
-                fit_wch(8),             // channel_out
-                fit_wch(4),             // channel (in)
-                fit_wsize(128),         // height
-                fit_wsize(128)          // width
+                fit_1bit(`L01_LAST_LAYER),      // last_layer
+                fit_1bit(`L01_OFM_SAVE),        // ofm_save
+                fit_wch(`L01_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L01_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L01_ROUTE_LOC),       // route_loc
+                fit_1bit(`L01_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L01_ROUTE_LOAD),      // route_load
+                fit_1bit(`L01_ROUTE_SAVE),      // route_save
+                fit_1bit(`L01_UPSAMPLE),        // upsample
+                fit_1bit(`L01_MAXPOOL),         // maxpool
+                fit_2bit(`L01_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L01_CHANNEL_OUT),      // channel_out
+                fit_wch(`L01_CHANNEL),          // channel (in)
+                fit_wsize(`L01_ROW),            // height
+                fit_wsize(`L01_COL)             // width
                 };
         5'd2: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                   // maxpool_stride
-                fit_row_stride(512),    // row_stride
-                fit_wframe(32768),      // frame_size
-                fit_wch(16),            // channel_out
-                fit_wch(8),             // channel (in)
-                fit_wsize(64),          // height
-                fit_wsize(64)           // width
+                fit_1bit(`L02_LAST_LAYER),      // last_layer
+                fit_1bit(`L02_OFM_SAVE),        // ofm_save
+                fit_wch(`L02_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L02_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L02_ROUTE_LOC),       // route_loc
+                fit_1bit(`L02_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L02_ROUTE_LOAD),      // route_load
+                fit_1bit(`L02_ROUTE_SAVE),      // route_save
+                fit_1bit(`L02_UPSAMPLE),        // upsample
+                fit_1bit(`L02_MAXPOOL),         // maxpool
+                fit_2bit(`L02_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L02_CHANNEL_OUT),      // channel_out
+                fit_wch(`L02_CHANNEL),          // channel (in)
+                fit_wsize(`L02_ROW),            // height
+                fit_wsize(`L02_COL)             // width
                 };
         5'd3: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                   // maxpool_stride
-                fit_row_stride(512),    // row_stride
-                fit_wframe(16384),      // frame_size
-                fit_wch(32),            // channel_out
-                fit_wch(16),            // channel (in)
-                fit_wsize(32),          // height
-                fit_wsize(32)           // width
+                fit_1bit(`L03_LAST_LAYER),      // last_layer
+                fit_1bit(`L03_OFM_SAVE),        // ofm_save
+                fit_wch(`L03_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L03_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L03_ROUTE_LOC),       // route_loc
+                fit_1bit(`L03_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L03_ROUTE_LOAD),      // route_load
+                fit_1bit(`L03_ROUTE_SAVE),      // route_save
+                fit_1bit(`L03_UPSAMPLE),        // upsample
+                fit_1bit(`L03_MAXPOOL),         // maxpool
+                fit_2bit(`L03_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L03_CHANNEL_OUT),      // channel_out
+                fit_wch(`L03_CHANNEL),          // channel (in)
+                fit_wsize(`L03_ROW),            // height
+                fit_wsize(`L03_COL)             // width
                 };
         5'd4: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd2,                   // maxpool_stride
-                fit_row_stride(512),    // row_stride
-                fit_wframe(8192),       // frame_size
-                fit_wch(64),            // channel_out
-                fit_wch(32),            // channel (in)
-                fit_wsize(16),          // height
-                fit_wsize(16)           // width
+                fit_1bit(`L04_LAST_LAYER),      // last_layer
+                fit_1bit(`L04_OFM_SAVE),        // ofm_save
+                fit_wch(`L04_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L04_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L04_ROUTE_LOC),       // route_loc
+                fit_1bit(`L04_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L04_ROUTE_LOAD),      // route_load
+                fit_1bit(`L04_ROUTE_SAVE),      // route_save
+                fit_1bit(`L04_UPSAMPLE),        // upsample
+                fit_1bit(`L04_MAXPOOL),         // maxpool
+                fit_2bit(`L04_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L04_CHANNEL_OUT),      // channel_out
+                fit_wch(`L04_CHANNEL),          // channel (in)
+                fit_wsize(`L04_ROW),            // height
+                fit_wsize(`L04_COL)             // width
                 };
         5'd5: layer_entry = {
-                1'b0,                   // upsample
-                1'b1,                   // maxpool
-                2'd1,                   // maxpool_stride
-                fit_row_stride(512),    // row_stride
-                fit_wframe(4096),       // frame_size
-                fit_wch(128),           // channel_out
-                fit_wch(64),            // channel (in)
-                fit_wsize(8),           // height
-                fit_wsize(8)            // width
+                fit_1bit(`L05_LAST_LAYER),      // last_layer
+                fit_1bit(`L05_OFM_SAVE),        // ofm_save
+                fit_wch(`L05_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L05_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L05_ROUTE_LOC),       // route_loc
+                fit_1bit(`L05_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L05_ROUTE_LOAD),      // route_load
+                fit_1bit(`L05_ROUTE_SAVE),      // route_save
+                fit_1bit(`L05_UPSAMPLE),        // upsample
+                fit_1bit(`L05_MAXPOOL),         // maxpool
+                fit_2bit(`L05_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L05_CHANNEL_OUT),      // channel_out
+                fit_wch(`L05_CHANNEL),          // channel (in)
+                fit_wsize(`L05_ROW),            // height
+                fit_wsize(`L05_COL)             // width
                 };
         5'd6: layer_entry = {
-                1'b0,                   // upsample
-                1'b0,                   // maxpool
-                2'd0,                   // maxpool_stride
-                fit_row_stride(1024),   // row_stride
-                fit_wframe(8192),       // frame_size
-                fit_wch(64),            // channel_out
-                fit_wch(128),           // channel (in)
-                fit_wsize(8),           // height
-                fit_wsize(8)            // width
+                fit_1bit(`L06_LAST_LAYER),      // last_layer
+                fit_1bit(`L06_OFM_SAVE),        // ofm_save
+                fit_wch(`L06_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L06_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L06_ROUTE_LOC),       // route_loc
+                fit_1bit(`L06_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L06_ROUTE_LOAD),      // route_load
+                fit_1bit(`L06_ROUTE_SAVE),      // route_save
+                fit_1bit(`L06_UPSAMPLE),        // upsample
+                fit_1bit(`L06_MAXPOOL),         // maxpool
+                fit_2bit(`L06_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L06_CHANNEL_OUT),      // channel_out
+                fit_wch(`L06_CHANNEL),          // channel (in)
+                fit_wsize(`L06_ROW),            // height
+                fit_wsize(`L06_COL)             // width
                 };
         5'd7: layer_entry = {
-                1'b0,                   // upsample
-                1'b0,                   // maxpool
-                2'd0,                   // maxpool_stride
-                fit_row_stride(512),    // row_stride
-                fit_wframe(4096),       // frame_size
-                fit_wch(128),           // channel_out
-                fit_wch(64),            // channel (in)
-                fit_wsize(8),           // height
-                fit_wsize(8)            // width
+                fit_1bit(`L07_LAST_LAYER),      // last_layer
+                fit_1bit(`L07_OFM_SAVE),        // ofm_save
+                fit_wch(`L07_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L07_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L07_ROUTE_LOC),       // route_loc
+                fit_1bit(`L07_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L07_ROUTE_LOAD),      // route_load
+                fit_1bit(`L07_ROUTE_SAVE),      // route_save
+                fit_1bit(`L07_UPSAMPLE),        // upsample
+                fit_1bit(`L07_MAXPOOL),         // maxpool
+                fit_2bit(`L07_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L07_CHANNEL_OUT),      // channel_out
+                fit_wch(`L07_CHANNEL),          // channel (in)
+                fit_wsize(`L07_ROW),            // height
+                fit_wsize(`L07_COL)             // width
                 };
         5'd8: layer_entry = {
-                1'b0,                   // upsample
-                1'b0,                   // maxpool
-                2'd0,                   // maxpool_stride
-                fit_row_stride(1024),   // row_stride
-                fit_wframe(8192),       // frame_size
-                fit_wch(49),            // channel_out
-                fit_wch(128),           // channel (in)
-                fit_wsize(8),           // height
-                fit_wsize(8)            // width
+                fit_1bit(`L08_LAST_LAYER),      // last_layer
+                fit_1bit(`L08_OFM_SAVE),        // ofm_save
+                fit_wch(`L08_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L08_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L08_ROUTE_LOC),       // route_loc
+                fit_1bit(`L08_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L08_ROUTE_LOAD),      // route_load
+                fit_1bit(`L08_ROUTE_SAVE),      // route_save
+                fit_1bit(`L08_UPSAMPLE),        // upsample
+                fit_1bit(`L08_MAXPOOL),         // maxpool
+                fit_2bit(`L08_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L08_CHANNEL_OUT),      // channel_out
+                fit_wch(`L08_CHANNEL),          // channel (in)
+                fit_wsize(`L08_ROW),            // height
+                fit_wsize(`L08_COL)             // width
+                };
+        5'd9: layer_entry = {
+                fit_1bit(`L09_LAST_LAYER),      // last_layer
+                fit_1bit(`L09_OFM_SAVE),        // ofm_save
+                fit_wch(`L09_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L09_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L09_ROUTE_LOC),       // route_loc
+                fit_1bit(`L09_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L09_ROUTE_LOAD),      // route_load
+                fit_1bit(`L09_ROUTE_SAVE),      // route_save
+                fit_1bit(`L09_UPSAMPLE),        // upsample
+                fit_1bit(`L09_MAXPOOL),         // maxpool
+                fit_2bit(`L09_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L09_CHANNEL_OUT),      // channel_out
+                fit_wch(`L09_CHANNEL),          // channel (in)
+                fit_wsize(`L09_ROW),            // height
+                fit_wsize(`L09_COL)             // width
+                };
+        5'd10: layer_entry = {
+                fit_1bit(`L10_LAST_LAYER),      // last_layer
+                fit_1bit(`L10_OFM_SAVE),        // ofm_save
+                fit_wch(`L10_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L10_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L10_ROUTE_LOC),       // route_loc
+                fit_1bit(`L10_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L10_ROUTE_LOAD),      // route_load
+                fit_1bit(`L10_ROUTE_SAVE),      // route_save
+                fit_1bit(`L10_UPSAMPLE),        // upsample
+                fit_1bit(`L10_MAXPOOL),         // maxpool
+                fit_2bit(`L10_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L10_CHANNEL_OUT),      // channel_out
+                fit_wch(`L10_CHANNEL),          // channel (in)
+                fit_wsize(`L10_ROW),            // height
+                fit_wsize(`L10_COL)             // width
+                };
+        5'd11: layer_entry = {
+                fit_1bit(`L11_LAST_LAYER),      // last_layer
+                fit_1bit(`L11_OFM_SAVE),        // ofm_save
+                fit_wch(`L11_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L11_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L11_ROUTE_LOC),       // route_loc
+                fit_1bit(`L11_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L11_ROUTE_LOAD),      // route_load
+                fit_1bit(`L11_ROUTE_SAVE),      // route_save
+                fit_1bit(`L11_UPSAMPLE),        // upsample
+                fit_1bit(`L11_MAXPOOL),         // maxpool
+                fit_2bit(`L11_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L11_CHANNEL_OUT),      // channel_out
+                fit_wch(`L11_CHANNEL),          // channel (in)
+                fit_wsize(`L11_ROW),            // height
+                fit_wsize(`L11_COL)             // width
+                };
+        5'd12: layer_entry = {
+                fit_1bit(`L12_LAST_LAYER),      // last_layer
+                fit_1bit(`L12_OFM_SAVE),        // ofm_save
+                fit_wch(`L12_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L12_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L12_ROUTE_LOC),       // route_loc
+                fit_1bit(`L12_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L12_ROUTE_LOAD),      // route_load
+                fit_1bit(`L12_ROUTE_SAVE),      // route_save
+                fit_1bit(`L12_UPSAMPLE),        // upsample
+                fit_1bit(`L12_MAXPOOL),         // maxpool
+                fit_2bit(`L12_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L12_CHANNEL_OUT),      // channel_out
+                fit_wch(`L12_CHANNEL),          // channel (in)
+                fit_wsize(`L12_ROW),            // height
+                fit_wsize(`L12_COL)             // width
+                };
+        5'd13: layer_entry = {
+                fit_1bit(`L13_LAST_LAYER),      // last_layer
+                fit_1bit(`L13_OFM_SAVE),        // ofm_save
+                fit_wch(`L13_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L13_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L13_ROUTE_LOC),       // route_loc
+                fit_1bit(`L13_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L13_ROUTE_LOAD),      // route_load
+                fit_1bit(`L13_ROUTE_SAVE),      // route_save
+                fit_1bit(`L13_UPSAMPLE),        // upsample
+                fit_1bit(`L13_MAXPOOL),         // maxpool
+                fit_2bit(`L13_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L13_CHANNEL_OUT),      // channel_out
+                fit_wch(`L13_CHANNEL),          // channel (in)
+                fit_wsize(`L13_ROW),            // height
+                fit_wsize(`L13_COL)             // width
+                };
+        5'd14: layer_entry = {
+                fit_1bit(`L14_LAST_LAYER),      // last_layer
+                fit_1bit(`L14_OFM_SAVE),        // ofm_save
+                fit_wch(`L14_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L14_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L14_ROUTE_LOC),       // route_loc
+                fit_1bit(`L14_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L14_ROUTE_LOAD),      // route_load
+                fit_1bit(`L14_ROUTE_SAVE),      // route_save
+                fit_1bit(`L14_UPSAMPLE),        // upsample
+                fit_1bit(`L14_MAXPOOL),         // maxpool
+                fit_2bit(`L14_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L14_CHANNEL_OUT),      // channel_out
+                fit_wch(`L14_CHANNEL),          // channel (in)
+                fit_wsize(`L14_ROW),            // height
+                fit_wsize(`L14_COL)             // width
+                };
+        5'd15: layer_entry = {
+                fit_1bit(`L15_LAST_LAYER),      // last_layer
+                fit_1bit(`L15_OFM_SAVE),        // ofm_save
+                fit_wch(`L15_ROUTE_CHN_OFFSET), // route_chn_offset
+                fit_aw(`L15_ROUTE_OFFSET),      // route_offset
+                fit_2bit(`L15_ROUTE_LOC),       // route_loc
+                fit_1bit(`L15_ROUTE_LOAD_SWAP), // route_load_swap (fm buf swap)
+                fit_1bit(`L15_ROUTE_LOAD),      // route_load
+                fit_1bit(`L15_ROUTE_SAVE),      // route_save
+                fit_1bit(`L15_UPSAMPLE),        // upsample
+                fit_1bit(`L15_MAXPOOL),         // maxpool
+                fit_2bit(`L15_MAXPOOL_STRIDE),  // maxpool_stride
+                fit_wch(`L15_CHANNEL_OUT),      // channel_out
+                fit_wch(`L15_CHANNEL),          // channel (in)
+                fit_wsize(`L15_ROW),            // height
+                fit_wsize(`L15_COL)             // width
                 };
         default: layer_entry = {W_ENTRY{1'b0}};
         endcase
@@ -1134,8 +1306,8 @@ localparam BYTES_PER_BEAT     = 4;
 localparam LOG_BYTES_PER_BEAT = $clog2(BYTES_PER_BEAT);
 
 
-reg [15:0] payload_beats_need;
-reg [15:0] payload_beats_seen;
+reg [31:0] payload_beats_need;
+reg [31:0] payload_beats_seen;
 wire       payload_done_early = (payload_beats_seen >= payload_beats_need);
 
 
@@ -1149,7 +1321,7 @@ wire [31:0] need_bytes_cur = (dma_load_cur_sel==SEL_IFM)    ? need_bytes_ifm
                            : (dma_load_cur_sel==SEL_BIAS)   ? need_bytes_bias  
                            : (dma_load_cur_sel==SEL_SCALE)  ? need_bytes_scale : 32'd0;
 
-wire [15:0] need_beats_cur = need_bytes_cur >> LOG_BYTES_PER_BEAT;
+wire [31:0] need_beats_cur = need_bytes_cur >> LOG_BYTES_PER_BEAT;
 
 
 always @(posedge clk or negedge rstn) begin
