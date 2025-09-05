@@ -178,7 +178,13 @@ reg [AFFINE_AW-1:0]     axi_wr_addr;
 reg [AXI_WIDTH_DA-1:0]  axi_wr_data;
 reg                     axi_wr_vld;
 
-wire [AFFINE_AW-1:0]    load_words = (q_channel_out << 2);
+
+wire [AFFINE_AW:0]   words_w = {q_channel_out, 2'b00};
+wire [AFFINE_AW:0]   last_w  = (words_w != 0) ? (words_w - {{AFFINE_AW{1'b0}},1'b1}) : { (AFFINE_AW+1){1'b0} };
+wire [AFFINE_AW-1:0] affine_last_addr = last_w[AFFINE_AW-1:0];
+
+// wire [AFFINE_AW-1:0]    affine_last_addr = (q_channel_out << 2) - 1'b1;
+// wire [AFFINE_AW:0]      load_words = (q_channel_out << 2);
 
 reg                     affine_load_done;
 
@@ -188,7 +194,7 @@ always @(posedge clk or negedge rstn) begin
     if (!rstn) begin 
         affine_load_done <= 0;
     end else begin 
-        if (axi_ptr == 1 && axi_wr_vld && (axi_wr_addr == load_words - 1)) begin 
+        if (axi_ptr == 1 && axi_wr_vld && (axi_wr_addr == affine_last_addr)) begin 
             affine_load_done <= 1;
         end else begin 
             affine_load_done <= 0;  // pulse
@@ -223,7 +229,7 @@ always @(posedge clk or negedge rstn) begin
                 axi_wr_addr <= axi_wr_addr + 1'b1;
             end
 
-            if (axi_wr_vld && (axi_wr_addr == load_words - 1)) begin
+            if (axi_wr_vld && (axi_wr_addr == affine_last_addr)) begin
                 axi_load_busy <= 1'b0;
             end
         end
