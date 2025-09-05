@@ -9,8 +9,10 @@ module yolo_engine_tb;
 `define TESTCASE_2 1
 
 // `include "define.v"
-`include "sim_cfg.vh"
+// `include "sim_cfg.vh"
 `include "sim_multi_cfg.vh"
+`include "yolo_layer_cfg.vh"
+
 
 localparam MEM_ADDRW = 22;
 localparam MEM_DW = 16;
@@ -20,13 +22,17 @@ localparam I = 4;
 localparam L = 8;
 localparam M = D/8;
 
+// localparam DRAM_IFM_OFFSET    = `DRAM_IFM_OFFSET;
+// localparam DRAM_FILTER_OFFSET = `DRAM_FILTER_OFFSET;
+// localparam DRAM_BIAS_OFFSET   = `DRAM_BIAS_OFFSET;
+// localparam DRAM_SCALE_OFFSET  = `DRAM_SCALE_OFFSET;
+// localparam DRAM_OFM_OFFSET    = `DRAM_OFM_OFFSET;
 
-
-localparam DRAM_IFM_OFFSET    = `DRAM_IFM_OFFSET;
-localparam DRAM_FILTER_OFFSET = `DRAM_FILTER_OFFSET;
-localparam DRAM_BIAS_OFFSET   = `DRAM_BIAS_OFFSET;
-localparam DRAM_SCALE_OFFSET  = `DRAM_SCALE_OFFSET;
-localparam DRAM_OFM_OFFSET    = `DRAM_OFM_OFFSET;
+localparam DRAM_IFM_OFFSET    = `YOLO_DRAM_IFM_OFFSET;
+localparam DRAM_FILTER_OFFSET = `YOLO_DRAM_FILTER_OFFSET;
+localparam DRAM_BIAS_OFFSET   = `YOLO_DRAM_BIAS_OFFSET;
+localparam DRAM_SCALE_OFFSET  = `YOLO_DRAM_SCALE_OFFSET;
+localparam DRAM_OFM_OFFSET    = `YOLO_DRAM_OFM_OFFSET;
 
 // Clock
 parameter CLK_PERIOD = 10;   //100MHz
@@ -146,7 +152,8 @@ u_axi_ext_mem_if_input(
 // Inputs
 //instruction memory
 sram #(
-   .FILE_NAME(`TEST_MULTI_MEMORY_16),
+   .FILE_NAME(`YOLO_MEMORY_16),
+    // .FILE_NAME(`TEST_MULTI_MEMORY_16),  // debug
    .SIZE(2**MEM_ADDRW),
    .WL_ADDR(MEM_ADDRW),
    .WL_DATA(MEM_DW  ))
@@ -173,12 +180,6 @@ yolo_engine #(
     .AXI_WIDTH_DS(M),
     .MEM_BASE_ADDR(2048),
     .MEM_DATA_BASE_ADDR(2048),
-    // for debugging
-    .TEST_COL(`TEST_COL),
-    .TEST_ROW(`TEST_ROW), 
-    .TEST_T_CHNIN(`TEST_T_CHNIN),
-    .TEST_T_CHNOUT(`TEST_T_CHNOUT),  
-    .TEST_FRAME_SIZE(`TEST_FRAME_SIZE),
     .DRAM_FILTER_OFFSET(DRAM_FILTER_OFFSET),
     .DRAM_BIAS_OFFSET(DRAM_BIAS_OFFSET),
     .DRAM_SCALE_OFFSET(DRAM_SCALE_OFFSET)
@@ -263,7 +264,8 @@ initial begin
    #(4*CLK_PERIOD) rstn = 1'b1; 
    #(100*CLK_PERIOD) 
         @(posedge clk)
-            i_0 = 32'd3; // ... _0011  debug_on
+            // i_0 = 32'd3; // ... _0011  debug_on
+            i_0 = 32'd1;    // ..._0001 debug off
             i_1 = DRAM_IFM_OFFSET;  // read addr
             i_2 = DRAM_OFM_OFFSET;  // write addr
 
@@ -291,7 +293,8 @@ initial begin
     `ifdef MONOLAYER
         $readmemh(`TEST_EXP_MAXPOOL_STRIDE2_PATH, expect);
     `else
-        $readmemh(`TEST_MULTI_EXPECT, expect);
+        // $readmemh(`TEST_MULTI_EXPECT, expect);  // debug
+        $readmemh(`YOLO_EXPECT, expect);
     `endif
 end
 
@@ -326,8 +329,8 @@ task automatic tb_check_multilayer_result;
         $display("============================================================");
         $display("MULTILAYER CHECK START");
 
-        exp_words = `EXPECT_LINE;
-        // `TEST_ROW * `TEST_COL * `TEST_T_CHNOUT;
+        exp_words = `YOLO_EXPECT_LINE;
+        // exp_words = `EXPECT_LINE; // debug
 
 
         for (i = 0; i < exp_words; i = i + 1) begin
