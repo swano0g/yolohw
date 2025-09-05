@@ -362,8 +362,11 @@ end
 wire f_start  = armed & read_data_vld;
 wire f_in_vld = q_load_filter & read_data_vld; 
 
+wire [FILTER_AW:0]   fb_words_w   = {q_channel, 2'b00}; // q_channel << 2
+wire [FILTER_AW:0]   fb_last_w    = (fb_words_w!=0) ? (fb_words_w - 1'b1) : { (FILTER_AW+1){1'b0} };
+wire [FILTER_AW-1:0] fb_last_addr = fb_last_w[FILTER_AW-1:0];
 
-wire [FILTER_AW-1:0] fb_last_addr = (q_channel << 2) -1'b1;
+// wire [FILTER_AW-1:0] fb_last_addr = (q_channel << 2) -1'b1;
 
 
 reg [FILTER_DW-1:0] acc0, acc1, acc2, acc3; 

@@ -1,7 +1,7 @@
 from .utils import TCParams, read_lsb_1byte
 
 
-def pack_filter_72b(params: TCParams, filter_src: list[str]) -> list[str]:
+def pack_filter_72b(filter_src: list[str]) -> list[str]:
     src_lines = read_lsb_1byte(filter_src)
     out: list[str] = []
     
@@ -14,16 +14,16 @@ def pack_filter_72b(params: TCParams, filter_src: list[str]) -> list[str]:
 
 
 
-def pack_filter_32b(params: TCParams, filter_src: list[str]) -> list[str]:
+def pack_filter_32b(cin: int, cout: int, filter_src: list[str]) -> list[str]:
     src_lines = read_lsb_1byte(filter_src)
     out: list[str] = []
     
-    for cg in range(0, params.cout, 4):
+    for cg in range(0, cout, 4):
         # 각 cin, k에 대해 하나의 32비트 워드 생성
-        for ci in range(params.cin):
+        for ci in range(cin):
             for k in range(9):
                 # 각 cout의 동일 (cin, k) 위치 바이트를 수집
-                idxs = [(((co * params.cin) + ci) * 9) + k for co in (cg, cg+1, cg+2, cg+3)]
+                idxs = [(((co * cin) + ci) * 9) + k for co in (cg, cg+1, cg+2, cg+3)]
                 b = [src_lines[i] for i in idxs]
 
                 # little endian
@@ -36,11 +36,11 @@ def pack_filter_32b(params: TCParams, filter_src: list[str]) -> list[str]:
 # ------------------------------
 # AFFINE 패킹 (bias + scale)
 # ------------------------------
-def pack_affine(params: TCParams, bias_src: list[str], scale_src: list[str]) -> list[str]:
+def pack_affine(cout: int, bias_src: list[str], scale_src: list[str]) -> list[str]:
     out: list[str] = []
-    for c in range(params.cout):
+    for c in range(cout):
         out.append(bias_src[c])
-    for c in range(params.cout):
+    for c in range(cout):
         out.append(scale_src[c])
         
     return out

@@ -56,7 +56,7 @@ def main():
     
     
     # memory builder
-    info_mono = memory_builder_monolayer(params, ifm_data, filt_32b_data, bias_data, scale_data)
+    info_mono = memory_builder_monolayer(ifm_data, filt_32b_data, bias_data, scale_data)
     write_hex_lines(params.out_memory_hex, info_mono["memory"])
     
     print("[OK] DRAM memory image built")
@@ -156,7 +156,7 @@ layer   mode   size    input       output       cin  cout
     mem_scale = scale_data_0 + scale_data_1
     
     
-    info_multi = memory_builder_monolayer(params, mem_ifm, mem_filt, mem_bias, mem_scale)
+    info_multi = memory_builder_monolayer(mem_ifm, mem_filt, mem_bias, mem_scale)
     out_multi_mem = params.out_dram_dir / f"multilayer_test_memory_16b.hex"
     write_hex_lines(out_multi_mem, info_multi["memory"])
     
@@ -274,7 +274,7 @@ def multilayer1():
     mem_scale = scale_data_0 + scale_data_1 + scale_data_2
     
     
-    info_multi = memory_builder_monolayer(params, mem_ifm, mem_filt, mem_bias, mem_scale)
+    info_multi = memory_builder_monolayer(mem_ifm, mem_filt, mem_bias, mem_scale)
     out_multi_mem = params.out_dram_dir / f"multilayer_test1_memory_16b.hex"
     write_hex_lines(out_multi_mem, info_multi["memory"])
     
@@ -316,9 +316,9 @@ def multilayer2():
     ifm_data_0, filt_data_0, bias_data_0, scale_data_0 = verify_inputs(params, ifm_src, filt_src, bias_src, scale_src)
     print("[OK] input sizes verified")
     
-    filt_72b_data_0 = pack_filter_72b(params, filt_data_0)
-    filt_32b_data_0 = pack_filter_32b(params, filt_data_0)
-    affine_data_0   = pack_affine(params, bias_data_0, scale_data_0)
+    filt_72b_data_0 = pack_filter_72b(filt_data_0)
+    filt_32b_data_0 = pack_filter_32b(params.cin, params.cout, filt_data_0)
+    affine_data_0   = pack_affine(params.cout, bias_data_0, scale_data_0)
     
     conv_result_0   = run_conv(ifm_data_0, filt_72b_data_0, params.height, params.width, params.cin, params.cout)
 
@@ -347,9 +347,9 @@ def multilayer2():
     ifm_data_1, filt_data_1, bias_data_1, scale_data_1 = verify_inputs(params, affine_result_0, filt_src_1, bias_src_1, scale_src_1)
     print("[OK] input sizes verified")
     
-    filt_72b_data_1 = pack_filter_72b(params, filt_data_1)
-    filt_32b_data_1 = pack_filter_32b(params, filt_data_1)
-    affine_data_1   = pack_affine(params, bias_data_1, scale_data_1)
+    filt_72b_data_1 = pack_filter_72b(filt_data_1)
+    filt_32b_data_1 = pack_filter_32b(params.cin, params.cout, filt_data_1)
+    affine_data_1   = pack_affine(params.cout, bias_data_1, scale_data_1)
     
     conv_result_1   = run_conv(ifm_data_1, filt_72b_data_1, params.height, params.width, params.cin, params.cout)
     affine_result_1 = run_affine_from_conv(conv_result_1, affine_data_1, params.height, params.width, params.cout)
@@ -407,9 +407,9 @@ def multilayer2():
     ifm_data_4, filt_data_4, bias_data_4, scale_data_4 = verify_inputs(params, concat_result_3, filt_src_4, bias_src_4, scale_src_4)
     print("[OK] input sizes verified")
     
-    filt_72b_data_4 = pack_filter_72b(params, filt_data_4)
-    filt_32b_data_4 = pack_filter_32b(params, filt_data_4)
-    affine_data_4   = pack_affine(params, bias_data_4, scale_data_4)
+    filt_72b_data_4 = pack_filter_72b(filt_data_4)
+    filt_32b_data_4 = pack_filter_32b(params.cin, params.cout, filt_data_4)
+    affine_data_4   = pack_affine(params.cout, bias_data_4, scale_data_4)
     
     conv_result_4   = run_conv(ifm_data_4, filt_72b_data_4, params.height, params.width, params.cin, params.cout)
     affine_result_4 = run_affine_from_conv(conv_result_4, affine_data_4, params.height, params.width, params.cout)
@@ -433,9 +433,9 @@ def multilayer2():
     mem_bias = bias_data_0 + bias_data_1 + bias_data_4
     mem_scale = scale_data_0 + scale_data_1 + scale_data_4
     
-    print(mem_scale)
+    # print(mem_scale)
     
-    info_multi = memory_builder_monolayer(params, mem_ifm, mem_filt, mem_bias, mem_scale)
+    info_multi = memory_builder_monolayer(mem_ifm, mem_filt, mem_bias, mem_scale)
     out_multi_mem = params.out_dram_dir / f"multilayer_test2_memory_16b.hex"
     write_hex_lines(out_multi_mem, info_multi["memory"])
     

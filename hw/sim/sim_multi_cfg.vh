@@ -3,11 +3,6 @@
 
 
 
-localparam  RTE_IFM  = 2'b00,
-            RTE_BUF  = 2'b01,
-            RTE_DRAM = 2'b10;   // not support
-
-
 // `define MULTI_TC_0 1
 // `define MULTI_TC_1 1
 `define MULTI_TC_2 1

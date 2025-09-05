@@ -1,5 +1,6 @@
 tmp/
 local/
+data/
 
 .DS_Store
 

@@ -67,9 +67,9 @@ reg  [W_SIZE-1:0]       c_row_counter;
 reg  [W_SIZE-1:0]       c_col_counter;
 reg  [W_CHANNEL-1:0]    c_chn_counter;
 
-wire                    c_is_last_row = (c_row_counter == c_height  - 1);
-wire                    c_is_last_col = (c_col_counter == c_width   - 1);
-wire                    c_is_last_chn = (c_chn_counter == c_channel - 1);
+wire                    c_is_last_row = (c_row_counter == c_height  - 1'b1);
+wire                    c_is_last_col = (c_col_counter == c_width   - 1'b1);
+wire                    c_is_last_chn = (c_chn_counter == c_channel - 1'b1);
 
 
 // Nested counters: chn fastest, then col, then row

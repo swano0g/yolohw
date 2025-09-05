@@ -135,10 +135,10 @@ always @(posedge clk or negedge rstn) begin
         load_addr_d <= read_data_cnt + q_route_offset;
 
         if (rte_buf_load_req && read_data_done == 0) begin 
-            if (read_data_cnt == q_frame_size - 1) begin 
+            if (read_data_cnt == q_frame_size - 1'b1) begin 
                 read_data_done <= 1;
             end else begin 
-                read_data_cnt <= read_data_cnt + 1;
+                read_data_cnt <= read_data_cnt + 1'b1;
             end
         end
 
