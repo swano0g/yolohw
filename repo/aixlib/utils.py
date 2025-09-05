@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 
 KERNEL_SIZE = 3  # 3x3
@@ -149,3 +149,23 @@ def read_lsb_1byte(in_list: list[str]) -> list[str]:
             
     return out
 
+
+
+def pad_1x1_to_3x3(filter_src: list[str], C: int, M: int) -> list[str]:
+    """
+    1x1 filter source를 받아 "00000000" 를 채워 3x3 filter source 생성
+    """
+    
+    out_filters: list[str] = []
+    idx = 0
+    for m in range(M):
+        for c in range(C):
+            val = filter_src[idx]
+            idx += 1
+            # 3x3 = 9개 중 가운데(인덱스 4)에 val, 나머지는 0
+            for i in range(9):
+                if i == 4:
+                    out_filters.append(val.lower().zfill(8))
+                else:
+                    out_filters.append("00000000")
+    return out_filters
